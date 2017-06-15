@@ -1,40 +1,65 @@
 (ns deercreeklabs.tube.server
   (:require
+   [bidi.ring]
+   [clojure.core.async :as async]
+   [deercreeklabs.tube.utils :as u]
+   [org.httpkit.server :as http]
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]]))
 
 (def StopperFn (s/=> s/Any))
+(def Handler (s/=> s/Any))
 
 (defn make-http-handler
   [status headers body]
-  (sym-map))
+  (u/sym-map status headers body))
 
-(defn make-ws-handler [on-connect]
-  (fn ws-handler [req]
-    (try
-      (http/with-channel req channel
-        (let [error-chan (ca/chan 10)
-              sender (fn [data]
-                       (when-not (http/send! channel data)
-                         (ca/put! error-chan :channel-closed)))
-              closer #(http/close channel)
-              ch-str (.toString channel)
-              [local remote-addr] (clojure.string/split ch-str #"<->")
-              handler (on-connect remote-addr sender closer)
-              {:keys [on-rcv on-disconnect on-error]} handler]
-          (http/on-close channel on-disconnect)
-          (http/on-receive channel on-rcv)
-          (ca/take! error-chan on-error)
-          (debugf "Got connection on %s from %s" (:uri req) remote-addr)))
-      (catch Exception e
-        (u/log-exception e)))))
+(def default-ws-handler-options
+  {:on-connect (fn [ws]
+                 (debugf "Websocket connected to %s" (u/get-peer-addr ws)))
+   :on-disconnect (fn [ws reason]
+                    (debugf "Websocket to %s disconnected. Reason: %s"
+                            (u/get-peer-addr ws) reason))
+   :on-rcv (fn [ws data]
+             (debugf "Got data from %s: %s" (u/get-peer-addr ws) data)
+             (debugf "Echoing data back...")
+             (u/send ws data)) ;; Echo the received data
+   :on-error (fn [ws error]
+               (debugf "Error on websocket to %s: %s"
+                       (u/get-peer-addr ws) error))})
+
+
+(s/defn make-ws-handler :- Handler
+  ([] (make-ws-handler {}))
+  ([options :- u/WebSocketOptions]
+   (fn ws-handler [req]
+     (try
+       (http/with-channel req channel
+         (let [error-chan (async/chan 10)
+               sender (fn [data]
+                        (when-not (http/send! channel data)
+                          (async/put! error-chan :channel-closed)))
+               closer #(http/close channel)
+               ch-str (.toString channel)
+               [local remote-addr] (clojure.string/split ch-str #"<->")
+               ws (u/make-websocket remote-addr sender closer)
+               options (merge default-ws-handler-options options)
+               {:keys [on-connect on-disconnect on-rcv on-error]} options]
+           (http/on-close channel (partial on-disconnect ws))
+           (http/on-receive channel (partial on-rcv ws))
+           (async/take! error-chan (partial on-error ws))
+           (on-connect ws)))
+       (catch Exception e
+         (u/log-exception e))))))
 
 (s/defn serve :- StopperFn
   [port :- s/Num
    routes :- {s/Str Handler}]
-  (let [handler (bidi.ring/make-handler routes)
-        _ (infof (str "Starting server on port " port "."))
+  (let [handler (bidi.ring/make-handler ["/" routes])
         options {:port port
                  :thread (.availableProcessors (Runtime/getRuntime))}
-        stopper (org.httpkit.server/run-server options)]
+        _ (infof "Starting server on port %s." port)
+        stopper (org.httpkit.server/run-server handler options)
+        stopper #(do (infof "Stopping server on port %s." port)
+                     (stopper))]
     stopper))
