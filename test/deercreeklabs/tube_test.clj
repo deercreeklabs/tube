@@ -29,7 +29,7 @@
             msg (.getBytes "Hello world" "UTF-8")
             _ (u/send client-ws msg)
             rsp (async/<!! client-rcv-chan)]
-        (is (u/equivalent-byte-arrays? msg rsp))
+        (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp)))
         (u/disconnect client-ws))
       (finally
         (stop-server)))))

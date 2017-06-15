@@ -1,6 +1,6 @@
 (ns deercreeklabs.tube.utils
   "Common code and utilities. Parts from https://github.com/farbetter/utils."
-  (:refer-clojure :exclude [send])
+  (:refer-clojure :exclude [byte-array send])
   (:require
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
@@ -8,6 +8,7 @@
      (:import
       (com.google.common.primitives Bytes)
       (java.io ByteArrayInputStream ByteArrayOutputStream)
+      (java.util Arrays)
       (java.util.zip DeflaterOutputStream InflaterOutputStream))))
 
 ;;;;;;;;;;;;;;;;;;;; Macros ;;;;;;;;;;;;;;;;;;;;
@@ -26,22 +27,21 @@
 
 (defprotocol IWebSocket
   (send [this data] "Sends data (a byte array) over the websocket")
-  (disconnect [this] "Disconnects the websocket")
-  (get-peer-addr [this] "Returns a string representing the peer's address"))
+  (disconnect [this] "Disconnects the websocket"))
 
 (defrecord WebSocket [peer-addr sender closer]
   IWebSocket
   (send [this data]
     (sender data))
   (disconnect [this]
-    (closer))
-  (get-peer-addr [this]
-    peer-addr))
+    (closer)))
 
 (defn make-websocket [peer-addr sender closer]
   (->WebSocket peer-addr sender closer))
 
 ;;;;;;;;;;;;;;;;;;;; Schemas ;;;;;;;;;;;;;;;;;;;;
+
+(def Nil (s/eq nil))
 
 (def ByteArray
   #?(:clj
@@ -55,10 +55,11 @@
     [s/Any]))
 
 (def WebSocketOptions
-  {(s/optional-key :on-connect) (s/=> (s/protocol IWebSocket))
-   (s/optional-key :on-disconnect) (s/=> (s/protocol IWebSocket) s/Str)
-   (s/optional-key :on-rcv) (s/=> (s/protocol IWebSocket) ByteArray)
-   (s/optional-key :on-error) (s/=> (s/protocol IWebSocket) s/Str)})
+  {(s/optional-key :on-connect) (s/=> WebSocket)
+   (s/optional-key :on-disconnect) (s/=> WebSocket s/Str)
+   (s/optional-key :on-rcv) (s/=> WebSocket ByteArray)
+   (s/optional-key :on-error) (s/=> WebSocket s/Str)
+   (s/optional-key :compression-type-kw) (s/maybe (s/enum :deflate :none))})
 
 ;;;;;;;;;;;;;;;;;;;; byte-arrays ;;;;;;;;;;;;;;;;;;;;
 
@@ -142,31 +143,41 @@
              (if this
                (.-length this)
                0))))
-#_
-(s/defn slice :- ByteArray
+
+(s/defn slice-byte-array :- ByteArray
   "Return a slice of the given byte array.
    Args:
         - array - Array to be sliced. Required.
-        - start - Start index. Required.
+        - start - Start index. Optional. Defaults to 0.
         - end - End index. Optional. If not provided, the slice will extend
              to the end of the array. The returned slice will not contain
              the byte at the end index position, i.e.: the slice fn uses
              a half-open interval."
+  ([array :- ByteArray]
+   (slice-byte-array array 0))
   ([array :- ByteArray
     start :- s/Num]
-   (slice array start (count array)))
+   (slice-byte-array array start (count array)))
   ([array :- ByteArray
     start :- s/Num
     end :- s/Num]
    (when (> start end)
-     (throw-far-error "Slice start is greater than end."
-                      :illegal-argument :slice-start-is-greater-than-end
-                      (sym-map start end)))
+     (throw (ex-info "Slice start is greater than end."
+                     {:type :illegal-argument
+                      :subtype :slice-start-is-greater-than-end
+                      :start start
+                      :end end})))
    (let [stop (min end (count array))]
      #?(:clj
         (Arrays/copyOfRange ^bytes array ^int start ^int stop)
         :cljs
         (.slice array start stop)))))
+
+(s/defn reverse-byte-array :- ByteArray
+  "Returns a new byte array with bytes reversed."
+  [bs :- ByteArray]
+  (-> (reverse bs)
+     (byte-array)))
 
 #?(:cljs
    (defn signed-byte-array->unsigned-byte-array [b]
@@ -211,6 +222,31 @@
             (.inflate pako)
             (unsigned-byte-array->signed-byte-array)))))
 
+(defn compression-type-kw->info [compression-type-kw]
+  (let [[compress decompress compression-type-id]
+        (case compression-type-kw
+          :deflate [deflate inflate 1]
+          :none [identity identity 0]
+          nil [identity identity 0]
+          (throw (ex-info
+                  (str "Illegal compression-type-kw: " compression-type-kw)
+                  {:type :illegal-argument
+                   :subtype :illegal-compression-option
+                   :compression-type-kw compression-type-kw})))]
+    (sym-map compress decompress compression-type-id compression-type-kw)))
+
+(defn compression-type-id->info [compression-type-id]
+  (let [[compress decompress compression-type-kw]
+        (case compression-type-id
+          1 [deflate inflate :deflate]
+          0 [identity identity :none]
+          nil [identity identity :none]
+          (throw (ex-info (str "Illegal compression-type-id: "
+                               compression-type-id)
+                          {:type :illegal-argument
+                           :subtype :illegal-compression-option
+                           :compression-type-id compression-type-id})))]
+    (sym-map compress decompress compression-type-id compression-type-kw)))
 
 ;;;;;;;;;;;;;;;;;;;; Exceptions ;;;;;;;;;;;;;;;;;;;;
 
