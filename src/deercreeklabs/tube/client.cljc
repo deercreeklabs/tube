@@ -21,7 +21,7 @@
    :on-error (fn [ws error]
                (debugf "Error on websocket to %s: %s"
                        (:peer-addr ws) error))
-   :compression-type :deflate})
+   :compression-type-kw :deflate})
 
 (s/defn make-websocket :- (s/protocol u/IWebSocket)
   ([uri :- s/Str] (make-websocket uri {}))
@@ -32,19 +32,26 @@
 
 ;;;;;;;;;;;;;;;;;;;; Helper fns ;;;;;;;;;;;;;;;;;;;;
 
-(defn make-websocket-clj
-  [uri options]
+(s/defn make-websocket-clj :- (s/protocol u/IWebSocket)
+  [uri :- s/Str
+   options :- u/WebSocketOptions]
   (let [{:keys [on-connect on-disconnect
                 on-rcv on-error compression-type-kw]} options
+        fragment-size 32000 ;; Jetty seems to work well w/ 32KB fragments
         *ws (atom nil)
-        *peer-fragment-size-kb (atom nil)
+        *peer-fragment-size (atom nil)
+        *num-fragments-rcvd (atom 0)
+        *num-fragments-in-msg (atom 0)
+        *fragment-buffer (atom [])
         compression-info (u/compression-type-kw->info compression-type-kw)
         {:keys [compress decompress compression-type-id]} compression-info
         on-bin (fn [bs offset length]
                  (let [data (u/slice-byte-array bs offset (+ offset length))]
-                   (if @*ws ;; if the ws is configured...
-                     (on-rcv @*ws (decompress data))
-                     (reset! *peer-fragment-size-kb (int (aget data 0))))))
+                   (debugf "@@@@ data: %s" (u/byte-array->debug-str data))
+                   (if-not @*ws ;; if the ws isn't configured...
+                     (reset! *peer-fragment-size
+                             (first (u/read-zig-zag-encoded-int data)))
+                       (on-rcv @*ws (decompress data)))))
         socket (ws/connect uri
                            :on-close (fn [status reason]
                                        (on-disconnect @*ws reason))
@@ -53,15 +60,16 @@
         closer #(ws/close socket)
         sender (fn [data]
                  (try
-                   ;; Send-msg mutates binary data, so we make a copy
-                   (let [data (u/slice-byte-array data)]
+                   (let [chunks (u/byte-array->chunks
+                                 data @*peer-fragment-size)]
                      (ws/send-msg socket (compress data)))
                    (catch Exception e
                      (on-error @*ws (u/get-exception-msg-and-stacktrace e)))))
-        fragment-size-kb 32 ;; Jetty seems to work well w/ 32KB fragments
-        header (u/byte-array [fragment-size-kb compression-type-id])
+        header (u/concat-byte-arrays
+                [(u/int->zig-zag-encoded-byte-array fragment-size)
+                 (u/int->zig-zag-encoded-byte-array compression-type-id)])
         _ (ws/send-msg socket header)
-        _ (while (not @*peer-fragment-size-kb)
+        _ (while (not @*peer-fragment-size)
             (Thread/sleep 1))
         ws (u/make-websocket uri sender closer)]
     (reset! *ws ws)

@@ -2,6 +2,10 @@
   "Common code and utilities. Parts from https://github.com/farbetter/utils."
   (:refer-clojure :exclude [byte-array send])
   (:require
+   [#?(:clj clojure.core.async :cljs cljs.core.async) :as async]
+   [#?(:clj clojure.core.async.impl.protocols
+       :cljs cljs.core.async.impl.protocols) :as cap]
+   #?(:clj [clojure.test :as test :refer [is]] :cljs [cljs.test :as test])
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   #?(:clj
@@ -10,6 +14,20 @@
       (java.io ByteArrayInputStream ByteArrayOutputStream)
       (java.util Arrays)
       (java.util.zip DeflaterOutputStream InflaterOutputStream))))
+
+;;;;;;;;;;;;;;;;;;;; Macro-writing utils ;;;;;;;;;;;;;;;;;;;;
+
+;; From: http://blog.nberger.com.ar/blog/2015/09/18/more-portable-complex-macro-musing/
+(defn- cljs-env?
+  "Take the &env from a macro, and return whether we are expanding into cljs."
+  [env]
+  (boolean (:ns env)))
+
+(defmacro if-cljs
+  "Return `then` if we are generating cljs code and `else` for Clojure code.
+  https://groups.google.com/d/msg/clojurescript/iBY5HaQda4A/w1lAQi9_AwsJ"
+  [then else]
+  (if (cljs-env? &env) then else))
 
 ;;;;;;;;;;;;;;;;;;;; Macros ;;;;;;;;;;;;;;;;;;;;
 
@@ -60,6 +78,8 @@
    (s/optional-key :on-rcv) (s/=> WebSocket ByteArray)
    (s/optional-key :on-error) (s/=> WebSocket s/Str)
    (s/optional-key :compression-type-kw) (s/maybe (s/enum :deflate :none))})
+
+(def Channel (s/protocol cap/Channel))
 
 ;;;;;;;;;;;;;;;;;;;; byte-arrays ;;;;;;;;;;;;;;;;;;;;
 
@@ -130,19 +150,21 @@
     result))
 
 ;; Make cljs byte-arrays countable
-#?(:cljs (extend-protocol ICounted
-           js/Int8Array
-           (-count [this]
-             (if this
-               (.-length this)
-               0))))
+#?(:cljs
+   (extend-protocol ICounted
+     js/Int8Array
+     (-count [this]
+       (if this
+         (.-length this)
+         0))))
 
-#?(:cljs (extend-protocol ICounted
-           js/Uint8Array
-           (-count [this]
-             (if this
-               (.-length this)
-               0))))
+#?(:cljs
+   (extend-protocol ICounted
+     js/Uint8Array
+     (-count [this]
+       (if this
+         (.-length this)
+         0))))
 
 (s/defn slice-byte-array :- ByteArray
   "Return a slice of the given byte array.
@@ -175,9 +197,72 @@
 
 (s/defn reverse-byte-array :- ByteArray
   "Returns a new byte array with bytes reversed."
-  [bs :- ByteArray]
-  (-> (reverse bs)
+  [ba :- ByteArray]
+  (-> (reverse ba)
      (byte-array)))
+
+(s/defn byte-array->chunks :- [ByteArray]
+  [ba :- ByteArray
+   chunk-size :- s/Int]
+  (debugf "### (count ba):%s chunk-size: %s" (count ba) chunk-size)
+  (if (zero? chunk-size)
+    (slice-byte-array ba)
+    (loop [offset 0
+           output []]
+      (if (>= offset (count ba))
+        output
+        (let [end-offset (+ offset chunk-size)
+              chunk (slice-byte-array ba offset end-offset)]
+          (recur end-offset
+                 (conj output chunk)))))))
+
+(s/defn byte-array->debug-str :- s/Str
+  [ba :- ByteArray]
+  #?(:clj (str "[" (clojure.string/join "," (map str ba)) "]")
+     :cljs (str ba)))
+
+(s/defn read-zig-zag-encoded-int :- [(s/one s/Int :int)
+                                     (s/optional ByteArray :unread-remainder)]
+  "Takes an zig-zag encoded byte array and reads an integer from it.
+   Returns a vector of the integer and, optionally, any unread bytes."
+  [ba :- ByteArray]
+  (loop [n 0
+         i 0
+         out 0]
+    (let [b (aget ba n)]
+      (if (zero? (bit-and b 0x80))
+        (let [zz-n (-> (bit-shift-left b i)
+                       (bit-or out))
+              int-out (->> (bit-and zz-n 1)
+                            (- 0)
+                            (bit-xor (unsigned-bit-shift-right zz-n 1)))]
+          (if (< (inc n) (count ba))
+            [int-out (slice-byte-array ba (inc n))]
+            [int-out]))
+        (let [out (-> (bit-and b 0x7f)
+                      (bit-shift-left i)
+                      (bit-or out))
+              i (+ 7 i)]
+          (if (<= i 31)
+            (recur (inc n) i out)
+            (throw
+             (ex-info "Variable-length quantity is more than 32 bits"
+                      {:type :illegal-argument
+                       :subtype :var-len-num-more-than-32-bits
+                       :i i}))))))))
+
+(s/defn int->zig-zag-encoded-byte-array :- ByteArray
+  "Zig zag encodes an integer. Returns the encoded bytes."
+  [i :- s/Int]
+  (let [zz-n (bit-xor (bit-shift-left i 1) (bit-shift-right i 31))]
+    (loop [n zz-n
+           out []]
+      (if (zero? (bit-and n -128))
+        (byte-array (conj out (bit-and n 0x7f)))
+        (let [b (-> (bit-and n 0x7f)
+                    (bit-or 0x80))]
+          (recur (unsigned-bit-shift-right n 7)
+                 (conj out b)))))))
 
 #?(:cljs
    (defn signed-byte-array->unsigned-byte-array [b]
@@ -189,8 +274,9 @@
 
 ;;;;;;;;;;;;;;;;;;;; Compression / Decompression ;;;;;;;;;;;;;;;;;;;;
 
-#?(:cljs (def pako (or (this-as this (.-pako this))
-                       js/module.exports)))
+#?(:cljs
+   (def pako (or (this-as this (.-pako this))
+                 js/module.exports)))
 
 (s/defn deflate :- (s/maybe ByteArray)
   [data :- (s/maybe ByteArray)]
@@ -269,3 +355,83 @@
 
 (defn log-exception [e]
   (errorf (get-exception-msg-and-stacktrace e)))
+
+;;;;;;;;;;;;;;;;;;;; core.async utils ;;;;;;;;;;;;;;;;;;;;
+
+(defmacro go-sf-helper [ex-type body]
+  `(try
+     [:success (do ~@body)]
+     (catch ~ex-type e#
+       [:failure e#])))
+
+(defmacro go-sf [& body]
+  `(if-cljs
+    (cljs.core.async.macros/go
+      (go-sf-helper :default ~body))
+    (clojure.core.async/go
+      (go-sf-helper Exception ~body))))
+
+(defn call-sf-helper [status ret f]
+  (if (= :success status)
+    ret
+    (if (instance? #?(:cljs js/Error
+                      :clj Throwable) ret)
+      (throw ret)
+      (throw (ex-info "call-sf! call failed"
+                      {:type :execution-error
+                       :subtype :async-call-failed
+                       :f f
+                       :reason ret})))))
+
+(defmacro call-sf! [f & args]
+  `(if-cljs
+    (let [[status# ret#] (cljs.core.async/<! (~f ~@args))]
+      (call-sf-helper status# ret# ~f))
+    (let [[status# ret#] (clojure.core.async/<! (~f ~@args))]
+      (call-sf-helper status# ret# ~f))))
+
+#?(:clj
+   (defmacro call-sf!! [f & args]
+     `(let [[status# ret#] (clojure.core.async/<!! (~f ~@args))]
+        (call-sf-helper status# ret# ~f))))
+
+;;;;;;;;;;;;;;;;;;;; Async test helpers ;;;;;;;;;;;;;;;;;;;;
+
+(defn- check-status [status ret]
+  (when (not= :success status)
+    (if (instance? #?(:cljs js/Error
+                      :clj Throwable) ret)
+      (throw ret)
+      (throw (ex-info "Asnyc test failed with an error."
+                      {:type :test-failure
+                       :subtype :error-in-async-test
+                       :status status
+                       :ret ret})))))
+
+(s/defn test-async* :- s/Any
+  [timeout-ms :- s/Num
+   go-sf-ch :- Channel]
+  (go-sf
+   (let [t (async/timeout timeout-ms)
+         [ret ch] (async/alts! [go-sf-ch t])
+         [status result] ret]
+     (if (= t ch)
+       (is (not= t ch)
+           (str "Test should have finished within " timeout-ms "ms."))
+       (check-status status result)))))
+
+(s/defn test-async :- s/Any
+  ([go-sf-ch :- Channel]
+   (test-async 1000 go-sf-ch))
+  ([timeout-ms :- s/Num
+    go-sf-ch :- Channel]
+   (let [ch (test-async* timeout-ms go-sf-ch)]
+     #?(:clj
+        (let [[status ret] (async/<!! ch)]
+          (check-status status ret))
+        :cljs
+        (async done
+               (async/take! ch (fn [ret]
+                              (let [[status result] ret]
+                                (check-status status result ))
+                              (done))))))))

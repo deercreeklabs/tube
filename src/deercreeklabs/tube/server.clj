@@ -10,7 +10,7 @@
 (def StopperFn (s/=> s/Any))
 (def Handler (s/=> s/Any))
 
-(def fragment-size-kb 255)
+(def fragment-size 200000)
 
 (def default-ws-handler-options
   {:on-connect (fn [ws]
@@ -30,6 +30,27 @@
   [status headers body]
   (u/sym-map status headers body))
 
+(defn- make-on-rcv*
+  [channel on-rcv ws *peer-fragment-size *compress *decompress]
+  (fn [data]
+    (if @*peer-fragment-size
+      (on-rcv ws (@*decompress data))
+      (let [[peer-fragment-size data] (u/read-zig-zag-encoded-int data)
+            [compression-type-id data] (u/read-zig-zag-encoded-int data)
+            _ (when (pos? (count data))
+                (throw (ex-info "Extra data recieved in negotiation header."
+                                {:type :execution-error
+                                 :subtype :extra-data-in-negotiation-header
+                                 :extra-data data
+                                 :extra-data-str
+                                 (u/byte-array->debug-str data)})))
+            compression-info (u/compression-type-id->info compression-type-id)]
+        (reset! *peer-fragment-size peer-fragment-size)
+        (reset! *compress (:compress compression-info))
+        (reset! *decompress (:decompress compression-info))
+        (http/send! channel (u/int->zig-zag-encoded-byte-array
+                             fragment-size))))))
+
 (s/defn make-ws-handler :- Handler
   ([] (make-ws-handler {}))
   ([options :- u/WebSocketOptions]
@@ -38,7 +59,7 @@
        (http/with-channel req channel
          (let [options (merge default-ws-handler-options options)
                {:keys [on-connect on-disconnect on-rcv on-error]} options
-               *peer-fragment-size-kb (atom nil)
+               *peer-fragment-size (atom nil)
                *compress (atom nil)
                *decompress (atom nil)
                ch-str (.toString channel)
@@ -49,21 +70,8 @@
                           (async/put! error-chan :channel-closed)))
                closer #(http/close channel)
                ws (u/make-websocket remote-addr sender closer)
-               on-rcv* (fn [data]
-                         (if @*peer-fragment-size-kb
-                           (on-rcv ws (@*decompress data))
-                           (let [peer-fragment-size-kb (int (aget data 0))
-                                 compression-type-id (int (aget data 1))
-                                 compression-info (u/compression-type-id->info
-                                                   compression-type-id)]
-                             (reset! *peer-fragment-size-kb
-                                     peer-fragment-size-kb)
-                             (reset! *compress
-                                     (:compress compression-info))
-                             (reset! *decompress
-                                     (:decompress compression-info))
-                             (http/send! channel
-                                         (byte-array [fragment-size-kb])))))]
+               on-rcv* (make-on-rcv* channel on-rcv ws *peer-fragment-size
+                                     *compress *decompress)]
            (http/on-receive channel on-rcv*)
            (http/on-close channel (partial on-disconnect ws))
            (async/take! error-chan (partial on-error ws))
