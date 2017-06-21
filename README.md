@@ -7,6 +7,9 @@ A websocket client and server library.
 Features:
   - Client libraries for Clojure, ClojureScript, and C++
   - Server library for Clojure
+  - Compression
+  - Message fragmentation
+  - Keep alive logic
 
 ## Installation via Leiningen / Clojars:
 
@@ -14,8 +17,9 @@ Features:
 
 ## License
 
-Original work Copyright (c) 2016 FarBetter, Inc.
-Modified work Copyright (c) 2017 Deer Creek Labs, LLC
+Copyright (c) 2017 Deer Creek Labs, LLC
+Some portions Copyright (c) 2015-2016 FarBetter, Inc.
+
 
 Distributed under the Apache Software License, Version 2.0
 http://www.apache.org/licenses/LICENSE-2.0.txt
