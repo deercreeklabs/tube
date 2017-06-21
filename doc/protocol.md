@@ -3,7 +3,7 @@
 The tube wire protocol is connection oriented. The connection begins
 by exchanging fragment size requests, then messages.
 
-##Initial Exchange
+## Initial Exchange
 
 #### Client->Server Fragment Size Request
 Sent by client, immediately after connection established
