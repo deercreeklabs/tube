@@ -1,4 +1,4 @@
-# Tube wire protocol
+# Tube Wire Protocol
 
 The tube wire protocol is connection oriented. The connection begins
 by exchanging fragment size requests, then messages.
@@ -21,9 +21,10 @@ message exchange.
 
 #### Message Header
 The most-significant five bits of first byte are interpreted as an
-*unsigned* five-bit integer, which gives information about the message:
+*unsigned* five-bit integer, which gives information about the
+message:  
 0 - Message is not compressed  
-1 - Message is compressed using deflate  
+1 - Message is compressed using deflate (compression id 1)  
 2 - Reserved for future compression scheme  
 3 - Reserved for future compression scheme  
 4 - Reserved for future compression scheme  
