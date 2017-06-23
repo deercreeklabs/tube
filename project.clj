@@ -18,6 +18,8 @@
   [[bidi "2.1.1"]
    [cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
+   [clj-time "0.13.0"]
+   [com.andrewmcveigh/cljs-time "0.5.0"]
    [com.google.guava/guava "22.0"]
    [com.taoensso/timbre "4.10.0"]
    [http-kit "2.2.0"]
@@ -27,7 +29,7 @@
    [prismatic/schema "1.1.6"]
    [stylefruits/gniazdo "1.0.0"]]
 
-  ;; :global-vars {*warn-on-reflection* true}
+  :global-vars {*warn-on-reflection* true}
 
   :cljsbuild
   {:builds

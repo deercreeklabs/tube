@@ -48,7 +48,7 @@ The least-significant three bits of the first byte are interpreted as an
 fragments in the message. If the least-significant three bits are all zero,
 the number of fragments is specified by the next 1-5 bytes, which will be
 a zig zag encoded signed integer. The maximum number of fragments is therefore
-2^31.
+2^31-1.
 
 #### Message Fragment
 After a data message is started by a data message header, the data fragments

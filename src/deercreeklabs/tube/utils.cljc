@@ -2,6 +2,8 @@
   "Common code and utilities. Parts from https://github.com/farbetter/utils."
   (:refer-clojure :exclude [byte-array send])
   (:require
+   [#?(:clj clj-time.format :cljs cljs-time.format) :as f]
+   [#?(:clj clj-time.core :cljs cljs-time.core) :as t]
    [#?(:clj clojure.core.async :cljs cljs.core.async) :as async]
    [#?(:clj clojure.core.async.impl.protocols
        :cljs cljs.core.async.impl.protocols) :as cap]
@@ -77,7 +79,9 @@
    (s/optional-key :on-disconnect) (s/=> WebSocket s/Str)
    (s/optional-key :on-rcv) (s/=> WebSocket ByteArray)
    (s/optional-key :on-error) (s/=> WebSocket s/Str)
-   (s/optional-key :compression-type-kw) (s/maybe (s/enum :deflate :none))})
+   (s/optional-key :compression-type) (s/maybe
+                                       (s/enum :none :smart :deflate))
+   (s/optional-key :keep-alive-secs) s/Num})
 
 (def Channel (s/protocol cap/Channel))
 
@@ -89,30 +93,31 @@
     (boolean (= ByteArray (class x)))))
 
 (s/defn concat-byte-arrays :- (s/maybe ByteArray)
-  [arrays :- (s/maybe [ByteArray])]
+  [arrays :- (s/maybe [(s/maybe ByteArray)])]
   (when arrays
-    (case (count arrays)
-      0 nil
-      1 (first arrays)
-      #?(:clj (Bytes/concat (into-array arrays))
-         :cljs
-         (let [lengths (map count arrays)
-               new-array (js/Int8Array. (apply + lengths))
-               offsets (loop [lens lengths
-                              pos 0
-                              positions [0]]
-                         (if (= 1 (count lens))
-                           positions
-                           (let [[len & rest] lens
-                                 new-pos (+ pos len)]
-                             (recur rest
-                                    new-pos
-                                    (conj positions new-pos)))))]
-           (dotimes [i (count arrays)]
-             (let [v (nth arrays i)
-                   offset (nth offsets i)]
-               (.set new-array v offset)))
-           new-array)))))
+    (let [arrays (keep identity arrays)]
+      (case (count arrays)
+        0 nil
+        1 (first arrays)
+        #?(:clj (Bytes/concat (into-array arrays))
+           :cljs
+           (let [lengths (map count arrays)
+                 new-array (js/Int8Array. (apply + lengths))
+                 offsets (loop [lens lengths
+                                pos 0
+                                positions [0]]
+                           (if (= 1 (count lens))
+                             positions
+                             (let [[len & rest] lens
+                                   new-pos (+ pos len)]
+                               (recur rest
+                                      new-pos
+                                      (conj positions new-pos)))))]
+             (dotimes [i (count arrays)]
+               (let [v (nth arrays i)
+                     offset (nth offsets i)]
+                 (.set new-array v offset)))
+             new-array))))))
 
 #?(:cljs
    (s/defn byte-array-cljs :- ByteArray
@@ -141,13 +146,16 @@
 (s/defn equivalent-byte-arrays? :- s/Bool
   [a :- ByteArray
    b :- ByteArray]
-  (let [cmp (fn [acc i]
-              (and acc
-                   (= (aget #^bytes a i)
-                      (aget #^bytes b i))))
-        result (and (= (count a) (count b))
-                    (reduce cmp true (range (count a))))]
-    result))
+  (and
+   (= (count a) (count b))
+   (let [num (count a)]
+     (loop [i 0]
+       (if (>= i num)
+         true
+         (if (= (aget ^bytes a i)
+                (aget ^bytes b i))
+           (recur (int (inc i)))
+           false))))))
 
 ;; Make cljs byte-arrays countable
 #?(:cljs
@@ -195,31 +203,34 @@
         :cljs
         (.slice array start stop)))))
 
+(s/defn byte-array->debug-str :- s/Str
+  [ba :- ByteArray]
+  #?(:clj (str "[" (clojure.string/join "," (map str ba)) "]")
+     :cljs (str ba)))
+
 (s/defn reverse-byte-array :- ByteArray
   "Returns a new byte array with bytes reversed."
   [ba :- ByteArray]
-  (-> (reverse ba)
-     (byte-array)))
+  (let [num (count ba)
+        last (dec num)
+        new (byte-array num)]
+    (dotimes [i num]
+      (aset ^bytes new i ^byte (aget ^bytes ba (- last i))))
+    new))
 
-(s/defn byte-array->chunks :- [ByteArray]
+(s/defn byte-array->fragments :- [ByteArray]
   [ba :- ByteArray
-   chunk-size :- s/Int]
-  (debugf "### (count ba):%s chunk-size: %s" (count ba) chunk-size)
-  (if (zero? chunk-size)
+   fragment-size :- s/Int]
+  (if (zero? fragment-size)
     (slice-byte-array ba)
     (loop [offset 0
            output []]
       (if (>= offset (count ba))
         output
-        (let [end-offset (+ offset chunk-size)
-              chunk (slice-byte-array ba offset end-offset)]
-          (recur end-offset
-                 (conj output chunk)))))))
-
-(s/defn byte-array->debug-str :- s/Str
-  [ba :- ByteArray]
-  #?(:clj (str "[" (clojure.string/join "," (map str ba)) "]")
-     :cljs (str ba)))
+        (let [end-offset (+ offset fragment-size)
+              fragment (slice-byte-array ba offset end-offset)]
+          (recur (int end-offset)
+                 (conj output fragment)))))))
 
 (s/defn read-zig-zag-encoded-int :- [(s/one s/Int :int)
                                      (s/optional ByteArray :unread-remainder)]
@@ -229,13 +240,13 @@
   (loop [n 0
          i 0
          out 0]
-    (let [b (aget ba n)]
+    (let [b (aget ^bytes ba n)]
       (if (zero? (bit-and b 0x80))
         (let [zz-n (-> (bit-shift-left b i)
                        (bit-or out))
               int-out (->> (bit-and zz-n 1)
-                            (- 0)
-                            (bit-xor (unsigned-bit-shift-right zz-n 1)))]
+                           (- 0)
+                           (bit-xor (unsigned-bit-shift-right zz-n 1)))]
           (if (< (inc n) (count ba))
             [int-out (slice-byte-array ba (inc n))]
             [int-out]))
@@ -280,6 +291,7 @@
 
 (s/defn deflate :- (s/maybe ByteArray)
   [data :- (s/maybe ByteArray)]
+  (debugf "$$$$$$$ deflate")
   (when data
     #?(:clj
        (let [os (ByteArrayOutputStream.)
@@ -295,6 +307,7 @@
 
 (s/defn inflate :- (s/maybe ByteArray)
   [deflated-data :- (s/maybe ByteArray)]
+  (debugf "###### inflate")
   (when deflated-data
     #?(:clj
        (let [os (ByteArrayOutputStream.)
@@ -308,33 +321,44 @@
             (.inflate pako)
             (unsigned-byte-array->signed-byte-array)))))
 
-(defn compression-type-kw->info [compression-type-kw]
-  (let [[compress decompress compression-type-id]
-        (case compression-type-kw
-          :deflate [deflate inflate 1]
-          :none [identity identity 0]
-          nil [identity identity 0]
-          (throw (ex-info
-                  (str "Illegal compression-type-kw: " compression-type-kw)
-                  {:type :illegal-argument
-                   :subtype :illegal-compression-option
-                   :compression-type-kw compression-type-kw})))]
-    (sym-map compress decompress compression-type-id compression-type-kw)))
+;;;;;;;;;;;;;;;;;;;; Platform detection ;;;;;;;;;;;;;;
 
-(defn compression-type-id->info [compression-type-id]
-  (let [[compress decompress compression-type-kw]
-        (case compression-type-id
-          1 [deflate inflate :deflate]
-          0 [identity identity :none]
-          nil [identity identity :none]
-          (throw (ex-info (str "Illegal compression-type-id: "
-                               compression-type-id)
-                          {:type :illegal-argument
-                           :subtype :illegal-compression-option
-                           :compression-type-id compression-type-id})))]
-    (sym-map compress decompress compression-type-id compression-type-kw)))
+(s/defn jvm? :- s/Bool
+  []
+  #?(:clj true
+     :cljs false))
 
-;;;;;;;;;;;;;;;;;;;; Exceptions ;;;;;;;;;;;;;;;;;;;;
+(s/defn browser? :- s/Bool
+  []
+  #?(:clj false
+     :cljs
+     (exists? js/navigator)))
+
+(s/defn node? :- s/Bool
+  []
+  #?(:clj false
+     :cljs (boolean (= "nodejs" cljs.core/*target*))))
+
+(s/defn jsc-ios? :- s/Bool
+  []
+  #?(:clj false
+     :cljs
+     (try
+       (boolean (= "jsc-ios" js/JSEnv))
+       (catch :default e
+         false))))
+
+;; TODO: Return which browser (e.g. chrome, safari, etc.)
+(s/defn get-platform-kw :- s/Keyword
+  []
+  (cond
+    (jvm?) :jvm
+    (node?) :node
+    (jsc-ios?) :jsc-ios
+    (browser?) :browser
+    :else :unknown))
+
+;;;;;;;;;;;;;;;;;;;; Logging & Exceptions ;;;;;;;;;;;;;;;;;;;;
 
 (s/defn get-exception-msg :- s/Str
   [e]
@@ -355,6 +379,25 @@
 
 (defn log-exception [e]
   (errorf (get-exception-msg-and-stacktrace e)))
+
+(s/defn short-log-output-fn :- s/Str
+  [data :- {(s/required-key :level) s/Keyword
+            s/Any s/Any}]
+  (let [{:keys [level msg_ ?ns-str ?file ?line]} data
+        formatter (f/formatters  :hour-minute-second-ms)
+        timestamp (f/unparse formatter (t/now))]
+    (str
+     timestamp " "
+     (clojure.string/upper-case (name level))  " "
+     "[" (or ?ns-str ?file "?") ":" (or ?line "?") "] - "
+     @msg_)))
+
+(defn configure-logging []
+  (timbre/merge-config!
+   {:level :debug
+    :output-fn short-log-output-fn
+    :appenders
+    {:println {:ns-blacklist ["io.netty.*" "io.atomix.*"]}}}))
 
 ;;;;;;;;;;;;;;;;;;;; core.async utils ;;;;;;;;;;;;;;;;;;;;
 
@@ -432,6 +475,130 @@
         :cljs
         (async done
                (async/take! ch (fn [ret]
-                              (let [[status result] ret]
-                                (check-status status result ))
-                              (done))))))))
+                                 (let [[status result] ret]
+                                   (check-status status result ))
+                                 (done))))))))
+
+;;;;;;;;;;;;;;;;;;;; Websocket helpers ;;;;;;;;;;;;;;;;;;;;
+
+(def max-num-fragments 2147483647)  ;; 2^31-1
+(def default-websocket-options
+  {:on-connect (fn [ws]
+                 (debugf "Websocket connected to %s" (:peer-addr ws)))
+   :on-disconnect (fn [ws reason]
+                    (debugf "Websocket to %s disconnected. Reason: %s"
+                            (:peer-addr ws) reason))
+   :on-rcv (fn [ws data]
+             (debugf "Got %s bytes from %s" (count data) (:peer-addr ws)))
+   :on-error (fn [ws error]
+               (errorf "Error on websocket to %s: %s"
+                       (:peer-addr ws) error))
+   :compression-type :none
+   :keep-alive-secs 30})
+
+(defn send-ping [ws]
+  (send ws (byte-array [0x88])))
+
+(defn send-pong [ws]
+  (send ws (byte-array [0x80])))
+
+(defn set-num-frags! [*num-fragments-in-msg data]
+  (let [num-frags (bit-and (first data) 0x07)
+        num-frags (if (pos? num-frags)
+                    num-frags
+                    (let [[num-frags extra-data] (read-zig-zag-encoded-int
+                                            (slice-byte-array data 1))]
+                      (if (zero? (count extra-data))
+                        num-frags
+                        (throw
+                         (ex-info "Extra data recieved in message header."
+                                  {:type :execution-error
+                                   :subtype :extra-data-in-message-header
+                                   :extra-data extra-data
+                                   :extra-data-str
+                                   (byte-array->debug-str data)})))))]
+    (reset! *num-fragments-in-msg num-frags)))
+
+(defn make-handle-rcv
+  ([on-rcv *peer-fragment-size *ws]
+   (make-handle-rcv on-rcv *peer-fragment-size *ws nil))
+  ([on-rcv *peer-fragment-size *ws on-negotiate]
+   (let [*num-fragments-rcvd (atom 0)
+         *num-fragments-in-msg (atom 0)
+         *fragment-buffer (atom [])
+         *decompress (atom nil)]
+     (fn [data]
+       (if-not @*peer-fragment-size
+         (let [[peer-fragment-size data] (read-zig-zag-encoded-int data)]
+           (when (pos? (count data))
+             (throw (ex-info "Extra data recieved in negotiation header."
+                             {:type :execution-error
+                              :subtype :extra-data-in-negotiation-header
+                              :extra-data data
+                              :extra-data-str
+                              (byte-array->debug-str data)})))
+           (reset! *peer-fragment-size peer-fragment-size)
+           (when on-negotiate
+             (on-negotiate)))
+         (if (zero? @*num-fragments-in-msg)
+           (let [code (bit-shift-right (bit-and (first data) 0xf8) 3)]
+             (case code
+               0 (do (set-num-frags! *num-fragments-in-msg data)
+                     (reset! *decompress identity))
+               1 (do (set-num-frags! *num-fragments-in-msg data)
+                     (reset! *decompress inflate))
+               16 (send-pong @*ws)
+               17 (debugf "Got pong from peer.")))
+           (do
+             (swap! *fragment-buffer conj data)
+             (swap! *num-fragments-rcvd inc)
+             (when (= @*num-fragments-rcvd @*num-fragments-in-msg)
+               (let [msg (@*decompress (concat-byte-arrays @*fragment-buffer))]
+                 (reset! *num-fragments-rcvd 0)
+                 (reset! *num-fragments-in-msg 0)
+                 (reset! *fragment-buffer [])
+                 (on-rcv @*ws msg))))))))))
+
+(defn compress-smart [data]
+  (if (<= (count data) 15)
+    [0 data]
+    (let [deflated (deflate data)]
+      (debugf "== orig: %s deflated: %s" (count data) (count deflated))
+      (if (<= (count data) (count deflated))
+        [0 data]
+        [1 deflated]))))
+
+(defn make-sender [ws-sender on-error compression-type *peer-fragment-size *ws
+                   proc-type]
+  (let [compress (case compression-type
+                   nil #(vector 0 %)
+                   :none #(vector 0 %)
+                   :smart compress-smart
+                   :deflate #(vector 1 (deflate %)))]
+    (fn [data]
+      (try
+        (let [[compression-id compressed] (compress data)
+              frags (byte-array->fragments compressed @*peer-fragment-size)
+              num-frags (count frags)
+              _ (debugf
+                 (str "!!(%s)!! orig: %s compressed: %s "
+                      "peer-frag-size: %s num-frags: %s")
+                 proc-type (count data) (count compressed)
+                 @*peer-fragment-size num-frags)
+              _ (when (> num-frags max-num-fragments)
+                  (throw (ex-info "Maximum message fragments exceeded."
+                                  {:type :illegal-argument
+                                   :subtype :too-many-fragments
+                                   :num-fragments num-frags
+                                   :max-num-framents max-num-fragments})))
+              first-byte (bit-shift-left compression-id 3)
+              header (if (<= num-frags 7)
+                       (byte-array [(bit-or first-byte num-frags)])
+                       (concat-byte-arrays
+                        [(byte-array [first-byte])
+                         (int->zig-zag-encoded-byte-array num-frags)]))]
+          (ws-sender header)
+          (doseq [frag frags]
+            (ws-sender frag)))
+        (catch Exception e
+          (on-error @*ws (get-exception-msg-and-stacktrace e)))))))
