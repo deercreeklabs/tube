@@ -221,6 +221,25 @@
       (aset ^bytes new i ^byte (aget ^bytes ba (- last i))))
     new))
 
+#?(:clj
+   (s/defn read-byte-array-from-file :- ByteArray
+     [filename :- s/Str]
+     (let [file (clojure.java.io/file filename)
+           result (byte-array (.length file))]
+       (with-open [in (java.io.DataInputStream.
+                       (clojure.java.io/input-stream file))]
+         (.readFully in result))
+       result)))
+
+#?(:clj
+   (s/defn write-byte-array-to-file :- Nil
+     [filename :- s/Str
+      ba :- ByteArray]
+     (with-open [out (clojure.java.io/output-stream
+                      (clojure.java.io/file filename))]
+       (.write out ^bytes ba))
+     nil))
+
 (s/defn byte-array->fragments :- [ByteArray]
   [ba :- ByteArray
    fragment-size :- s/Int]

@@ -10,6 +10,7 @@
    {:plugins
     [[lein-ancient "0.6.10"]
      [lein-cljsbuild "1.1.6"]
+     [lein-cloverage "1.0.9"]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
      [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]}}
