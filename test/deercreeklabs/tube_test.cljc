@@ -48,27 +48,27 @@
        :else
        (is (u/equivalent-byte-arrays? ~msg (u/reverse-byte-array ret#))))))
 
-
 (deftest test-round-trip-w-small-msg
   (u/test-async
    1000
    (u/go-sf
     (let [stop-server (tube-server/run-reverser-server port)]
       (try
-        (let [msg (.getBytes "Hello world!" "UTF-8")
+        (let [msg (u/byte-array [72,101,108,108,111,32,119,111,114,108,100,33])
               client-ret-ch (<send-ws-msg-and-return-rsp msg)]
           (check-reversed client-ret-ch msg 1000))
         (finally
           (stop-server)))))))
 
-(deftest test-round-trip-w-large-msg
-  (u/test-async
-   10000
-   (u/go-sf
-    (let [stop-server (tube-server/run-reverser-server port)]
-      (try
-        (let [msg (u/read-byte-array-from-file "lots_o_bytes.bin")
-              client-ret-ch (<send-ws-msg-and-return-rsp msg)]
-          (check-reversed client-ret-ch msg 10000))
-        (finally
-          (stop-server)))))))
+#?(:clj  ;; File ops are only defined for clj
+   (deftest test-round-trip-w-large-msg
+     (u/test-async
+      10000
+      (u/go-sf
+       (let [stop-server (tube-server/run-reverser-server port)]
+         (try
+           (let [msg (u/read-byte-array-from-file "lots_o_bytes.bin")
+                 client-ret-ch (<send-ws-msg-and-return-rsp msg)]
+             (check-reversed client-ret-ch msg 10000))
+           (finally
+             (stop-server))))))))
