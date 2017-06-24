@@ -224,7 +224,7 @@
 #?(:clj
    (s/defn read-byte-array-from-file :- ByteArray
      [filename :- s/Str]
-     (let [file (clojure.java.io/file filename)
+     (let [file ^java.io.File (clojure.java.io/file filename)
            result (byte-array (.length file))]
        (with-open [in (java.io.DataInputStream.
                        (clojure.java.io/input-stream file))]
@@ -277,7 +277,7 @@
                       (bit-or out))
               i (+ 7 i)]
           (if (<= i 31)
-            (recur (inc n) i out)
+            (recur (inc n) (int i) (int out))
             (throw
              (ex-info "Variable-length quantity is more than 32 bits"
                       {:type :illegal-argument
