@@ -26,6 +26,25 @@
   [status headers body]
   (u/sym-map status headers body))
 
+(defn server-on-connect
+  [ws-sender fragment-size rcv-chan on-connect on-error *ws *peer-fragment-size]
+  (async/go
+    (try
+      (let [frag-req (u/int->zig-zag-encoded-byte-array fragment-size)
+            data (async/<! rcv-chan)
+            [peer-fragment-size data] (u/read-zig-zag-encoded-int data)]
+        (when (pos? (count data))
+          (throw (ex-info "Extra data recieved in negotiation header."
+                          {:type :execution-error
+                           :subtype :extra-data-in-negotiation-header
+                           :extra-data data
+                           :extra-data-str
+                           (u/byte-array->debug-str data)})))
+        (ws-sender frag-req)
+        (reset! *peer-fragment-size peer-fragment-size)
+        (on-connect @*ws))
+      (catch Exception e
+          (on-error @*ws (u/get-exception-msg-and-stacktrace e))))))
 
 (s/defn make-ws-handler :- Handler
   ([] (make-ws-handler {}))
@@ -40,20 +59,20 @@
                *ws (atom nil)
                ws-sender #(when-not (http/send! channel %)
                             (on-error @*ws :channel-closed))
-               on-negotiate #(ws-sender (u/int->zig-zag-encoded-byte-array
-                                         fragment-size))
-               handle-rcv (u/make-handle-rcv on-rcv *peer-fragment-size *ws
-                                             on-negotiate)
+               rcv-chan (async/chan)
+               handle-rcv (u/make-handle-rcv on-rcv rcv-chan
+                                             *peer-fragment-size *ws)
                ch-str (.toString ^org.httpkit.server.AsyncChannel channel)
                [local remote-addr] (clojure.string/split ch-str #"<->")
                sender (u/make-sender ws-sender on-error compression-type
                                      *peer-fragment-size *ws :server)
                closer #(http/close channel)
-               ws (u/make-websocket remote-addr sender closer)]
+               ws (u/make-websocket remote-addr sender ws-sender closer)]
            (reset! *ws ws)
            (http/on-receive channel handle-rcv)
            (http/on-close channel (partial on-disconnect ws))
-           (on-connect ws)))
+           (server-on-connect ws-sender fragment-size rcv-chan on-connect
+                              on-error *ws *peer-fragment-size)))
        (catch Exception e
          (u/log-exception e))))))
 

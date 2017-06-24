@@ -47,17 +47,20 @@
 
 (defprotocol IWebSocket
   (send [this data] "Sends data (a byte array) over the websocket")
+  (send-raw [this data] "Sends raw data w/o header, etc. Internal use only.")
   (disconnect [this] "Disconnects the websocket"))
 
-(defrecord WebSocket [peer-addr sender closer]
+(defrecord WebSocket [peer-addr sender raw-sender closer]
   IWebSocket
   (send [this data]
     (sender data))
+  (send-raw [this data]
+    (raw-sender data))
   (disconnect [this]
     (closer)))
 
-(defn make-websocket [peer-addr sender closer]
-  (->WebSocket peer-addr sender closer))
+(defn make-websocket [peer-addr sender raw-sender closer]
+  (->WebSocket peer-addr sender raw-sender closer))
 
 ;;;;;;;;;;;;;;;;;;;; Schemas ;;;;;;;;;;;;;;;;;;;;
 
@@ -291,7 +294,6 @@
 
 (s/defn deflate :- (s/maybe ByteArray)
   [data :- (s/maybe ByteArray)]
-  (debugf "$$$$$$$ deflate")
   (when data
     #?(:clj
        (let [os (ByteArrayOutputStream.)
@@ -307,7 +309,6 @@
 
 (s/defn inflate :- (s/maybe ByteArray)
   [deflated-data :- (s/maybe ByteArray)]
-  (debugf "###### inflate")
   (when deflated-data
     #?(:clj
        (let [os (ByteArrayOutputStream.)
@@ -445,7 +446,7 @@
     (if (instance? #?(:cljs js/Error
                       :clj Throwable) ret)
       (throw ret)
-      (throw (ex-info "Asnyc test failed with an error."
+      (throw (ex-info (str "Asnyc test failed with an error: " ret)
                       {:type :test-failure
                        :subtype :error-in-async-test
                        :status status
@@ -459,7 +460,7 @@
          [ret ch] (async/alts! [go-sf-ch t])
          [status result] ret]
      (if (= t ch)
-       (is (not= t ch)
+       (is (= :test :timeout)
            (str "Test should have finished within " timeout-ms "ms."))
        (check-status status result)))))
 
@@ -493,21 +494,24 @@
    :on-error (fn [ws error]
                (errorf "Error on websocket to %s: %s"
                        (:peer-addr ws) error))
-   :compression-type :none
+   :compression-type :smart
    :keep-alive-secs 30})
 
+(defn send-control-code [ws code]
+  (send-raw ws (byte-array [(bit-shift-left code 3)])))
+
 (defn send-ping [ws]
-  (send ws (byte-array [0x88])))
+  (send-control-code ws 16))
 
 (defn send-pong [ws]
-  (send ws (byte-array [0x80])))
+  (send-control-code ws 17))
 
 (defn set-num-frags! [*num-fragments-in-msg data]
   (let [num-frags (bit-and (first data) 0x07)
         num-frags (if (pos? num-frags)
                     num-frags
                     (let [[num-frags extra-data] (read-zig-zag-encoded-int
-                                            (slice-byte-array data 1))]
+                                                  (slice-byte-array data 1))]
                       (if (zero? (count extra-data))
                         num-frags
                         (throw
@@ -520,50 +524,39 @@
     (reset! *num-fragments-in-msg num-frags)))
 
 (defn make-handle-rcv
-  ([on-rcv *peer-fragment-size *ws]
-   (make-handle-rcv on-rcv *peer-fragment-size *ws nil))
-  ([on-rcv *peer-fragment-size *ws on-negotiate]
-   (let [*num-fragments-rcvd (atom 0)
-         *num-fragments-in-msg (atom 0)
-         *fragment-buffer (atom [])
-         *decompress (atom nil)]
-     (fn [data]
-       (if-not @*peer-fragment-size
-         (let [[peer-fragment-size data] (read-zig-zag-encoded-int data)]
-           (when (pos? (count data))
-             (throw (ex-info "Extra data recieved in negotiation header."
-                             {:type :execution-error
-                              :subtype :extra-data-in-negotiation-header
-                              :extra-data data
-                              :extra-data-str
-                              (byte-array->debug-str data)})))
-           (reset! *peer-fragment-size peer-fragment-size)
-           (when on-negotiate
-             (on-negotiate)))
-         (if (zero? @*num-fragments-in-msg)
-           (let [code (bit-shift-right (bit-and (first data) 0xf8) 3)]
-             (case code
-               0 (do (set-num-frags! *num-fragments-in-msg data)
-                     (reset! *decompress identity))
-               1 (do (set-num-frags! *num-fragments-in-msg data)
-                     (reset! *decompress inflate))
-               16 (send-pong @*ws)
-               17 (debugf "Got pong from peer.")))
-           (do
-             (swap! *fragment-buffer conj data)
-             (swap! *num-fragments-rcvd inc)
-             (when (= @*num-fragments-rcvd @*num-fragments-in-msg)
-               (let [msg (@*decompress (concat-byte-arrays @*fragment-buffer))]
-                 (reset! *num-fragments-rcvd 0)
-                 (reset! *num-fragments-in-msg 0)
-                 (reset! *fragment-buffer [])
-                 (on-rcv @*ws msg))))))))))
+  [on-rcv rcv-chan *peer-fragment-size *ws]
+  (let [*num-fragments-rcvd (atom 0)
+        *num-fragments-in-msg (atom 0)
+        *fragment-buffer (atom [])
+        *decompress (atom nil)]
+    (fn [data]
+      (if-not @*peer-fragment-size
+        (async/put! rcv-chan data)
+        (if (zero? @*num-fragments-in-msg)
+          (let [masked (bit-and (first data) 0xf8)
+                code (bit-shift-right masked 3)]
+            (case code
+              0 (do (set-num-frags! *num-fragments-in-msg data)
+                    (reset! *decompress identity))
+              1 (do (set-num-frags! *num-fragments-in-msg data)
+                    (reset! *decompress inflate))
+              16 (do (debugf "Got ping from peer.")
+                     (send-pong @*ws))
+              17 (debugf "Got pong from peer.")))
+          (do
+            (swap! *fragment-buffer conj data)
+            (swap! *num-fragments-rcvd inc)
+            (when (= @*num-fragments-rcvd @*num-fragments-in-msg)
+              (let [msg (@*decompress (concat-byte-arrays @*fragment-buffer))]
+                (reset! *num-fragments-rcvd 0)
+                (reset! *num-fragments-in-msg 0)
+                (reset! *fragment-buffer [])
+                (on-rcv @*ws msg)))))))))
 
 (defn compress-smart [data]
   (if (<= (count data) 15)
     [0 data]
     (let [deflated (deflate data)]
-      (debugf "== orig: %s deflated: %s" (count data) (count deflated))
       (if (<= (count data) (count deflated))
         [0 data]
         [1 deflated]))))
@@ -580,11 +573,6 @@
         (let [[compression-id compressed] (compress data)
               frags (byte-array->fragments compressed @*peer-fragment-size)
               num-frags (count frags)
-              _ (debugf
-                 (str "!!(%s)!! orig: %s compressed: %s "
-                      "peer-frag-size: %s num-frags: %s")
-                 proc-type (count data) (count compressed)
-                 @*peer-fragment-size num-frags)
               _ (when (> num-frags max-num-fragments)
                   (throw (ex-info "Maximum message fragments exceeded."
                                   {:type :illegal-argument
@@ -600,5 +588,5 @@
           (ws-sender header)
           (doseq [frag frags]
             (ws-sender frag)))
-        (catch Exception e
-          (on-error @*ws (get-exception-msg-and-stacktrace e)))))))
+        (catch #?(:clj Exception :cljs :default) e
+            (on-error @*ws (get-exception-msg-and-stacktrace e)))))))

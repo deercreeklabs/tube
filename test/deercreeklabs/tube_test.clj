@@ -15,7 +15,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Unit tests
 
-(def lots-o-bytes (u/byte-array (take 1e7 (repeatedly #(rand-int 127)))))
+(def lots-o-bytes (u/byte-array (take 5e5 (repeatedly #(rand-int 127)))))
 
 (deftest test-round-trip
   (u/test-async
@@ -27,12 +27,16 @@
       (try
         (let [url (str "ws://localhost:" port)
               client-rcv-chan (async/chan)
-              client-options {:on-rcv (fn [ws data]
+              connected-chan (async/chan)
+              client-options {:on-connect (fn [ws]
+                                            (async/put! connected-chan true))
+                              :on-rcv (fn [ws data]
                                         (async/put! client-rcv-chan data))}
               client-ws (tube-client/make-websocket url client-options)
               msg "Hello world!"
               msg-bin (.getBytes msg "UTF-8")
               msg-bin lots-o-bytes
+              connected? (async/<! connected-chan) ;; wait for connection
               _ (u/send client-ws msg-bin)
               [rsp ch] (async/alts! [client-rcv-chan (async/timeout 1000000)])]
           (debugf "Got rsp")
