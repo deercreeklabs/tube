@@ -15,33 +15,60 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Unit tests
 
-(deftest test-round-trip
+(def port 8080)
+
+(defn <send-ws-msg-and-return-rsp [msg]
+  (u/go-sf
+   (let [url (str "ws://localhost:" port)
+         client-rcv-chan (async/chan)
+         connected-chan (async/chan)
+         client-options {:on-connect (fn [ws]
+                                       (async/put! connected-chan true))
+                         :on-rcv (fn [ws data]
+                                   (async/put! client-rcv-chan data))}
+         client (tube-client/make-websocket url client-options)
+         ;; wait for connection
+         connected? (async/<! connected-chan)
+         _ (u/send client msg)
+         ret (async/<! client-rcv-chan)]
+     (u/disconnect client)
+     ret)))
+
+(defmacro check-reversed [client-ret-ch msg timeout]
+  `(let [timeout-ch# (async/timeout ~timeout)
+         [[status# ret#] ch#] (async/alts! [~client-ret-ch timeout-ch#])]
+     (cond
+       (= timeout-ch# ch#)
+       (is (= nil "Timed out waiting for client response..."))
+
+
+       (= :failure status#)
+       (is (= nil (str "Round trip failed: " ret#)))
+
+       :else
+       (is (u/equivalent-byte-arrays? ~msg (u/reverse-byte-array ret#))))))
+
+
+(deftest test-round-trip-w-small-msg
   (u/test-async
-   1000000
+   1000
    (u/go-sf
-    (let [port 8080
-          routes {"" (tube-server/make-ws-handler)}
-          stop-server (tube-server/serve port routes)]
+    (let [stop-server (tube-server/run-reverser-server port)]
       (try
-        (let [url (str "ws://localhost:" port)
-              client-rcv-chan (async/chan)
-              connected-chan (async/chan)
-              client-options {:on-connect (fn [ws]
-                                            (async/put! connected-chan true))
-                              :on-rcv (fn [ws data]
-                                        (async/put! client-rcv-chan data))}
-              client-ws (tube-client/make-websocket url client-options)
-              msg "Hello world!"
-              msg-bin (.getBytes msg "UTF-8")
-              ;;msg-bin (u/read-byte-array-from-file "lots_o_bytes.bin")
-              connected? (async/<! connected-chan) ;; wait for connection
-              _ (u/send client-ws msg-bin)
-              [rsp ch] (async/alts! [client-rcv-chan (async/timeout 1000000)])]
-          (debugf "Got rsp")
-          (if (= client-rcv-chan ch)
-            (is (u/equivalent-byte-arrays? msg-bin (u/reverse-byte-array rsp)))
-            (is (= nil "Timed out waiting for client response...")))
-          (debugf "About to disconnect")
-          (u/disconnect client-ws))
+        (let [msg (.getBytes "Hello world!" "UTF-8")
+              client-ret-ch (<send-ws-msg-and-return-rsp msg)]
+          (check-reversed client-ret-ch msg 1000))
+        (finally
+          (stop-server)))))))
+
+(deftest test-round-trip-w-large-msg
+  (u/test-async
+   10000
+   (u/go-sf
+    (let [stop-server (tube-server/run-reverser-server port)]
+      (try
+        (let [msg (u/read-byte-array-from-file "lots_o_bytes.bin")
+              client-ret-ch (<send-ws-msg-and-return-rsp msg)]
+          (check-reversed client-ret-ch msg 10000))
         (finally
           (stop-server)))))))

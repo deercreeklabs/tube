@@ -1,4 +1,5 @@
 (ns deercreeklabs.tube.server
+  (:gen-class)
   (:require
    [bidi.ring]
    [clojure.core.async :as async]
@@ -87,3 +88,14 @@
         stopper #(do (infof "Stopping server on port %s." port)
                      (stopper))]
     stopper))
+
+(s/defn run-reverser-server :- StopperFn
+  ([] (run-reverser-server 8080))
+  ([port]
+   (let [routes {"" (make-ws-handler)}
+         stop-server (serve port routes)]
+     stop-server)))
+
+(defn -main
+  [& args]
+  (run-reverser-server))

@@ -13,7 +13,9 @@
      [lein-cloverage "1.0.9"]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
-     [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]}}
+     [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]}
+   :uberjar {:aot :all
+             :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
   :dependencies
   [[bidi "2.1.1"]
@@ -31,6 +33,8 @@
    [stylefruits/gniazdo "1.0.0"]]
 
   :global-vars {*warn-on-reflection* true}
+
+  :main deercreeklabs.tube.server
 
   :cljsbuild
   {:builds
