@@ -1,74 +1,67 @@
 (ns deercreeklabs.tube-test
   (:require
-   [clojure.core.async :as async]
+   [#?(:clj clojure.core.async :cljs cljs.core.async) :as async
+    :refer [alts! #?@(:clj [go])]]
    [clojure.test :refer [deftest is use-fixtures]]
    [deercreeklabs.tube.client :as tube-client]
-   [deercreeklabs.tube.server :as tube-server]
-   [deercreeklabs.tube.utils :as u]
+   [deercreeklabs.tube.utils :as u :refer [#?@(:clj [go-sf])]]
    [schema.core :as s :include-macros true]
    [schema.test :as st]
-   [taoensso.timbre :as timbre :refer [debugf errorf infof]]))
+   [taoensso.timbre :as timbre :refer [debugf errorf infof]])
+  #?(:cljs
+     (:require-macros
+      [cljs.core.async.macros :refer [go]]
+      [deercreeklabs.tube.utils :refer [go-sf]])))
 
-(use-fixtures :once schema.test/validate-schemas)
+;; Use this instead of fixtures, which are hard to make work w/ async testing.
+;;(s/set-fn-validation! true)
 
 (u/configure-logging)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Unit tests
 
+;;;; IMPORTANT!!! You must start a server for these tests to work.
+;;;; e.g. $ lein run
+
 (def port 8080)
 
-(defn <send-ws-msg-and-return-rsp [msg]
+(defn <send-ws-msg-and-return-rsp [msg timeout]
   (u/go-sf
    (let [url (str "ws://localhost:" port)
-         client-rcv-chan (async/chan)
-         connected-chan (async/chan)
+         client-rcv-ch (async/chan)
+         connected-ch (async/chan)
          client-options {:on-connect (fn [ws]
-                                       (async/put! connected-chan true))
+                                       (async/put! connected-ch true))
+                         :on-disconnect (fn [ws reason])
                          :on-rcv (fn [ws data]
-                                   (async/put! client-rcv-chan data))}
+                                   (async/put! client-rcv-ch data))}
          client (tube-client/make-websocket url client-options)
          ;; wait for connection
-         connected? (async/<! connected-chan)
+         connected? (async/<! connected-ch)
          _ (u/send client msg)
-         ret (async/<! client-rcv-chan)]
+         timeout-ch (async/timeout timeout)
+         [ret ch] (alts! [client-rcv-ch timeout-ch])]
      (u/disconnect client)
-     ret)))
-
-(defmacro check-reversed [client-ret-ch msg timeout]
-  `(let [timeout-ch# (async/timeout ~timeout)
-         [[status# ret#] ch#] (async/alts! [~client-ret-ch timeout-ch#])]
-     (cond
-       (= timeout-ch# ch#)
-       (is (= nil "Timed out waiting for client response..."))
-
-
-       (= :failure status#)
-       (is (= nil (str "Round trip failed: " ret#)))
-
-       :else
-       (is (u/equivalent-byte-arrays? ~msg (u/reverse-byte-array ret#))))))
+     (if (= timeout-ch ch)
+       (throw (ex-info "Timed out waiting for client response"
+                       {:type :execution-error
+                        :subtype :timeout
+                        :timeout timeout}))
+       ret))))
 
 (deftest test-round-trip-w-small-msg
   (u/test-async
    1000
-   (u/go-sf
-    (let [stop-server (tube-server/run-reverser-server port)]
-      (try
-        (let [msg (u/byte-array [72,101,108,108,111,32,119,111,114,108,100,33])
-              client-ret-ch (<send-ws-msg-and-return-rsp msg)]
-          (check-reversed client-ret-ch msg 1000))
-        (finally
-          (stop-server)))))))
+   (go-sf
+    (let [msg (u/byte-array [72,101,108,108,111,32,119,111,114,108,100,33])
+          rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 1000000)]
+      (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp)))))))
 
 #?(:clj  ;; File ops are only defined for clj
    (deftest test-round-trip-w-large-msg
      (u/test-async
       10000
-      (u/go-sf
-       (let [stop-server (tube-server/run-reverser-server port)]
-         (try
-           (let [msg (u/read-byte-array-from-file "lots_o_bytes.bin")
-                 client-ret-ch (<send-ws-msg-and-return-rsp msg)]
-             (check-reversed client-ret-ch msg 10000))
-           (finally
-             (stop-server))))))))
+      (go-sf
+       (let [msg (u/read-byte-array-from-file "lots_o_bytes.bin")
+             rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 10000)]
+         (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp))))))))

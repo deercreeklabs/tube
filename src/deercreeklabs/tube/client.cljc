@@ -11,23 +11,23 @@
 
 (defn client-on-connect
   [ws-sender fragment-size rcv-chan on-connect on-error *ws *peer-fragment-size]
-  (async/go
-    (try
-      (let [frag-req (u/int->zig-zag-encoded-byte-array fragment-size)
-            _ (ws-sender frag-req)
-            data (async/<! rcv-chan)
-            [peer-fragment-size data] (u/read-zig-zag-encoded-int data)]
-        (when (pos? (count data))
-          (throw (ex-info "Extra data recieved in negotiation header."
-                          {:type :execution-error
-                           :subtype :extra-data-in-negotiation-header
-                           :extra-data data
-                           :extra-data-str
-                           (u/byte-array->debug-str data)})))
-        (reset! *peer-fragment-size peer-fragment-size)
-        (on-connect @*ws))
-      (catch #?(:clj Exception :cljs :default) e
-          (on-error @*ws (u/get-exception-msg-and-stacktrace e))))))
+  (u/go-sf
+   (try
+     (let [frag-req (u/int->zig-zag-encoded-byte-array fragment-size)
+           _ (ws-sender frag-req)
+           data (async/<! rcv-chan)
+           [peer-fragment-size data] (u/read-zig-zag-encoded-int data)]
+       (when (pos? (count data))
+         (throw (ex-info "Extra data recieved in negotiation header."
+                         {:type :execution-error
+                          :subtype :extra-data-in-negotiation-header
+                          :extra-data data
+                          :extra-data-str
+                          (u/byte-array->debug-str data)})))
+       (reset! *peer-fragment-size peer-fragment-size)
+       (on-connect @*ws))
+     (catch #?(:clj Exception :cljs :default) e
+         (on-error @*ws (u/get-exception-msg-and-stacktrace e))))))
 
 #?(:clj
    (defn make-websocket-clj
@@ -60,32 +60,29 @@
      (let [fragment-size 32000
            WSC (goog.object.get (js/require "websocket") "client")
            client (WSC.)
-           conn-atom (atom nil)
+           *conn (atom nil)
            msg-handler (fn [msg-obj]
-                         (let [type (goog.object.get msg-obj "type")
-                               data (if (= "utf8" type)
-                                      (goog.object.get msg-obj "utf8Data")
-                                      (-> (goog.object.get msg-obj "binaryData")
-                                          (js/Int8Array.)))]
-                           (on-rcv data)))
-           conn-handler (fn [conn]
-                          (reset! conn-atom conn)
-                          (on-connect)
-                          (.on conn "close" (fn [reason description]
-                                              (on-disconnect description)))
-                          (.on conn "message" msg-handler)
-                          (.on conn "error" on-error))
-           ws-closer #(if @conn-atom
-                        (.close @conn-atom)
+                         (let [data (-> (goog.object.get msg-obj "binaryData")
+                                        (js/Int8Array.))]
+                           (handle-rcv data)))
+           ws-closer #(if @*conn
+                        (.close @*conn)
                         (.abort client))
            ws-sender (fn [data]
-                       (if (string? data)
-                         (.sendUTF @conn-atom data)
-                         (.sendBytes @conn-atom (js/Buffer. data))))
+                       (.sendBytes @*conn (js/Buffer. data)))
+           conn-handler (fn [conn]
+                          (.on conn "close" (fn [status reason]
+                                              (on-disconnect @*ws reason)))
+                          (.on conn "error" #(on-error @*ws %))
+                          (.on conn "message" msg-handler)
+                          (reset! *conn conn)
+                          (client-on-connect ws-sender fragment-size rcv-chan
+                                             on-connect on-error
+                                             *ws *peer-fragment-size))
            failure-handler  (fn [err]
                               (let [reason [:connect-failure err]]
-                                (on-error reason)
-                                (on-disconnect reason)))]
+                                (on-error @*ws reason)
+                                (on-disconnect @*ws reason)))]
        (.on client "connectFailed" failure-handler)
        (.on client "connect" conn-handler)
        (.connect client uri)
@@ -104,12 +101,12 @@
      ))
 
 (defn start-keep-alive-loop [ws keep-alive-secs *peer-fragment-size *shutdown]
-  (async/go
-    (while (not @*peer-fragment-size)
-      (async/<! (async/timeout 10)))
-    (while (not @*shutdown)
-      (async/<! (async/timeout (int (* 1000 keep-alive-secs))))
-      (u/send-ping ws))))
+  (u/go-sf
+   (while (not @*peer-fragment-size)
+     (async/<! (async/timeout 10)))
+   (while (not @*shutdown)
+     (async/<! (async/timeout (int (* 1000 keep-alive-secs))))
+     (u/send-ping ws))))
 
 ;;;;;;;;;;;;;;;;;;;; API ;;;;;;;;;;;;;;;;;;;;
 
@@ -130,7 +127,6 @@
          handle-rcv (u/make-handle-rcv on-rcv rcv-chan *peer-fragment-size *ws)
          ws-factory #?(:clj make-websocket-clj
                        :cljs (case (u/get-platform-kw)
-                               :jvm make-websocket-clj
                                :node make-websocket-node
                                :browswer make-websocket-browser
                                :jsc-ios make-websocket-jsc-ios))

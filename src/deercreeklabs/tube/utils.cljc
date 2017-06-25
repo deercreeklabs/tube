@@ -2,14 +2,20 @@
   "Common code and utilities. Parts from https://github.com/farbetter/utils."
   (:refer-clojure :exclude [byte-array send])
   (:require
+   #?(:cljs [cljsjs.pako])
    [#?(:clj clj-time.format :cljs cljs-time.format) :as f]
    [#?(:clj clj-time.core :cljs cljs-time.core) :as t]
-   [#?(:clj clojure.core.async :cljs cljs.core.async) :as async]
+   [#?(:clj clojure.core.async :cljs cljs.core.async) :as async
+    :refer [#?@(:clj [go])]]
    [#?(:clj clojure.core.async.impl.protocols
        :cljs cljs.core.async.impl.protocols) :as cap]
    #?(:clj [clojure.test :as test :refer [is]] :cljs [cljs.test :as test])
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
+  #?(:cljs
+     (:require-macros
+      [cljs.core.async.macros :refer [go]]
+      [cljs.test :refer [is]]))
   #?(:clj
      (:import
       (com.google.common.primitives Bytes)
@@ -89,6 +95,8 @@
 (def Channel (s/protocol cap/Channel))
 
 ;;;;;;;;;;;;;;;;;;;; byte-arrays ;;;;;;;;;;;;;;;;;;;;
+
+#?(:cljs (def class type))
 
 (s/defn byte-array? :- s/Bool
   [x :- s/Any]
@@ -474,14 +482,12 @@
 (s/defn test-async* :- s/Any
   [timeout-ms :- s/Num
    go-sf-ch :- Channel]
-  (go-sf
-   (let [t (async/timeout timeout-ms)
-         [ret ch] (async/alts! [go-sf-ch t])
-         [status result] ret]
-     (if (= t ch)
-       (is (= :test :timeout)
-           (str "Test should have finished within " timeout-ms "ms."))
-       (check-status status result)))))
+  (go
+    (let [t (async/timeout timeout-ms)
+          [ret ch] (async/alts! [go-sf-ch t])]
+      (if (= t ch)
+        [:failure :async-test-timeout]
+        ret))))
 
 (s/defn test-async :- s/Any
   ([go-sf-ch :- Channel]
@@ -493,11 +499,13 @@
         (let [[status ret] (async/<!! ch)]
           (check-status status ret))
         :cljs
-        (async done
+        (cljs.test/async done
                (async/take! ch (fn [ret]
-                                 (let [[status result] ret]
-                                   (check-status status result ))
-                                 (done))))))))
+                              (try
+                                (let [[status result] ret]
+                                  (check-status status result))
+                                (finally
+                                  (done))))))))))
 
 ;;;;;;;;;;;;;;;;;;;; Websocket helpers ;;;;;;;;;;;;;;;;;;;;
 
@@ -526,7 +534,7 @@
   (send-control-code ws 17))
 
 (defn set-num-frags! [*num-fragments-in-msg data]
-  (let [num-frags (bit-and (first data) 0x07)
+  (let [num-frags (bit-and (aget data 0) 0x07)
         num-frags (if (pos? num-frags)
                     num-frags
                     (let [[num-frags extra-data] (read-zig-zag-encoded-int
@@ -552,7 +560,7 @@
       (if-not @*peer-fragment-size
         (async/put! rcv-chan data)
         (if (zero? @*num-fragments-in-msg)
-          (let [masked (bit-and (first data) 0xf8)
+          (let [masked (bit-and (aget data 0) 0xf8)
                 code (bit-shift-right masked 3)]
             (case code
               0 (do (set-num-frags! *num-fragments-in-msg data)
