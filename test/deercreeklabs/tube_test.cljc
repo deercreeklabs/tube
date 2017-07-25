@@ -57,7 +57,7 @@
           rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 1000000)]
       (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp)))))))
 
-#?(:clj  ;; File ops are only defined for clj
+#?(:clj  ;; File ops are currently only defined for clj
    (deftest test-round-trip-w-large-msg
      (u/test-async
       10000

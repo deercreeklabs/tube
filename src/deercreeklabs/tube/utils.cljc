@@ -473,7 +473,7 @@
     (if (instance? #?(:cljs js/Error
                       :clj Throwable) ret)
       (throw ret)
-      (throw (ex-info (str "Asnyc test failed with an error: " ret)
+      (throw (ex-info (str "Async test failed with an error: " ret)
                       {:type :test-failure
                        :subtype :error-in-async-test
                        :status status
@@ -533,8 +533,10 @@
 (defn send-pong [ws]
   (send-control-code ws 17))
 
-(defn set-num-frags! [*num-fragments-in-msg data]
-  (let [num-frags (bit-and (aget data 0) 0x07)
+(s/defn set-num-frags! :- Nil
+  [*num-fragments-in-msg :- s/Num
+   data :- ByteArray]
+  (let [num-frags (bit-and (aget #^bytes data 0) 0x07)
         num-frags (if (pos? num-frags)
                     num-frags
                     (let [[num-frags extra-data] (read-zig-zag-encoded-int
@@ -556,11 +558,11 @@
         *num-fragments-in-msg (atom 0)
         *fragment-buffer (atom [])
         *decompress (atom nil)]
-    (fn [data]
+    (s/fn [data :- ByteArray]
       (if-not @*peer-fragment-size
         (async/put! rcv-chan data)
         (if (zero? @*num-fragments-in-msg)
-          (let [masked (bit-and (aget data 0) 0xf8)
+          (let [masked (bit-and (aget #^bytes data 0) 0xf8)
                 code (bit-shift-right masked 3)]
             (case code
               0 (do (set-num-frags! *num-fragments-in-msg data)
