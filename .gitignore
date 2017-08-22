@@ -13,6 +13,14 @@ pom.xml.asc
 # JS stuff
 /node_modules
 
+# C++ stuff
+*.dylib
+*.so
+*.o
+*.a
+*.lib
+bin/
+
 # Emacs stuff
 *~
 \#*\#

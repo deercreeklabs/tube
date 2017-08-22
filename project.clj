@@ -9,7 +9,7 @@
   {:dev
    {:plugins
     [[lein-ancient "0.6.10"]
-     [lein-cljsbuild "1.1.6"]
+     [lein-cljsbuild "1.1.7"]
      [lein-cloverage "1.0.9"]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
@@ -18,19 +18,19 @@
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
   :dependencies
-  [[bidi "2.1.1"]
+  [[bidi "2.1.2"]
    [cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
-   [clj-time "0.13.0"]
-   [com.andrewmcveigh/cljs-time "0.5.0"]
-   [com.google.guava/guava "22.0"]
+   [clj-time "0.14.0"]
+   [com.andrewmcveigh/cljs-time "0.5.1"]
+   [com.google.guava/guava "23.0"]
    [com.taoensso/timbre "4.10.0"]
    [http-kit "2.2.0"]
    [org.clojure/clojure "1.8.0"]
-   [org.clojure/clojurescript "1.9.562"]
+   [org.clojure/clojurescript "1.9.908"]
    [org.clojure/core.async "0.3.443"]
    [prismatic/schema "1.1.6"]
-   [stylefruits/gniazdo "1.0.0"]]
+   [stylefruits/gniazdo "1.0.1"]]
 
   :global-vars {*warn-on-reflection* true}
 
