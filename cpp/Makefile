@@ -1,20 +1,24 @@
 NAME := tube
 DLIB := lib$(NAME)
+CXX := clang++
 
 DEPS := src/tube_server.h src/tube_server.cpp
-CPP_SHARED := -std=c++11 -O3 -I src -shared -fPIC src/tube_server.cpp
+CPP_SHARED := -shared -fPIC
+CPP_OPENSSL_OSX := -L/usr/local/opt/openssl/lib -I/usr/local/opt/openssl/include
 CPP_OSX := -stdlib=libc++ -mmacosx-version-min=10.7 -undefined dynamic_lookup $(CPP_OPENSSL_OSX) -I/usr/local/include
+CPPFLAGS := $(CPPFLAGS) -std=c++11 -O3 -I src
 
-default:
+.PHONY: default
+default: $(DEPS)
 	@make `(uname -s)`
 
 .PHONY: Linux
 Linux:
-	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) -s -o $(DLIB).so
+	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) -s -o $(DLIB).so src/tube_server.cpp
 
 .PHONY: Darwin
 Darwin:
-	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) $(CPP_OSX) -o $(DLIB).dylib
+	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) $(CPP_OSX) -o $(DLIB).dylib src/tube_server.cpp
 
 .PHONY: install
 install:
@@ -40,5 +44,5 @@ clean:
 
 test: src/test_main.cpp default
 	@mkdir -p bin
-	@$(CXX) -std=c++11 -O3 -L. -l$(NAME) -o bin/run_test $<
+	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_OSX) -L. -l$(NAME) -o bin/run_test $<
 	@bin/run_test

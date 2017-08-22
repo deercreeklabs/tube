@@ -1,6 +1,8 @@
 #ifndef TUBE_SERVER_H
 #define TUBE_SERVER_H
 
+#include "uWS/uWS.h"
+
 typedef const char *cstr;
 
 typedef void on_rcv_fn_t (cstr conn_id, void *data);
