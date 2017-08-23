@@ -1,6 +1,7 @@
 #include "tube_server.h"
 #include "utils.h"
 #include <cstdio>
+#include <cstdint>
 #include <iostream>
 #include <string>
 
@@ -8,7 +9,7 @@
 using namespace std;
 
 
-void on_rcv (ws_t *ws, void *data, int length) {
+void on_rcv (ws_t *ws, void *data, uint32_t length) {
     cout << "got data on ws. " << endl;
 }
 
@@ -71,11 +72,14 @@ void run_unit_tests() {
     test_encode_decode();
 }
 
-int main (int argc, char *argv[]) {
-    run_unit_tests();
-    int port = 8080;
+void run_server() {
+    uint32_t port = 8080;
     cout << "Starting server on " << port << "." << endl;
     TubeServer ts("key", "cert", port,
                   on_rcv, on_connect, on_disconnect);
-    cout << "conn count: " << ts.get_conn_count() << endl;
+}
+
+int main (int argc, char *argv[]) {
+    run_unit_tests();
+    //run_server();
 }
