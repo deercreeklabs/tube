@@ -1,5 +1,6 @@
 #include "tube_server.h"
 #include <iostream>
+#include <string>
 
 using namespace std;
 
@@ -24,8 +25,8 @@ TubeServer::TubeServer(const char *sslKey, const char *sslCert, int port,
             this->connection_count--;
             string msg(message, length);
             cout << "onDisconnection. Close code: " << code;
-            cout << " msg: " << message << endl;
-            on_disconnect_fn(ws, message);
+            cout << " msg: " << msg << endl;
+            on_disconnect_fn(ws, msg.c_str());
         });
     hub.onMessage(
         [on_rcv_fn]
