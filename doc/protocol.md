@@ -7,12 +7,12 @@ by exchanging fragment size requests, then messages.
 
 #### Client->Server Fragment Size Request
 Sent by client, immediately after the connection is established.
-An Avro-varint-encoded signed integer representing the client's desired
+An zig-zag-varint-encoded signed integer representing the client's desired
 fragment size. 1-5 bytes in size.
 
 #### Server->Client Fragment Size Request
 Sent by server, in response to the initial client->server fragment size
-requrest. An Avro-varint-encoded signed integer representing the server's desired
+requrest. An zig-zag-varint-encoded signed integer representing the server's desired
 fragment size. 1-5 bytes in size.
 
 ## Messages
@@ -47,7 +47,7 @@ The least-significant three bits of the first byte are interpreted as an
 *unsigned* three-bit integer which represents the number of
 fragments in the message. If the least-significant three bits are all zero,
 the number of fragments is specified by the next 1-5 bytes, which will be
-an Avro-varint-encoded signed integer. The maximum number of fragments is therefore
+an zig-zag-varint-encoded signed integer. The maximum number of fragments is therefore
 2^31-1.
 
 #### Message Fragment
