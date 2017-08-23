@@ -7,7 +7,7 @@
 using namespace std;
 
 // Returns consumed buffer length
-uint8_t encode_int(int32_t i, char *buffer) {
+uint_fast8_t encode_int(int32_t i, char *buffer) {
     uint32_t n = (i << 1) ^ (i >> 31); // Zig zag encode
     uint8_t buf_idx = 0;
     while(true) {
