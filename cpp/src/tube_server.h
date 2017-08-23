@@ -1,6 +1,7 @@
 #ifndef TUBE_SERVER_H
 #define TUBE_SERVER_H
 
+#include <unordered_map>
 #include <uWS/uWS.h>
 
 typedef const char *cstr;
@@ -15,6 +16,8 @@ class TubeServer
 private:
     uWS::Hub hub;
     int connection_count;
+    conn_id_t next_conn_id;
+    std::unordered_map<conn_id_t, uWS::WebSocket<uWS::SERVER> *> conn_id_to_ws;
 
 public:
     TubeServer(const char *sslKey, const char *sslCert, int port,

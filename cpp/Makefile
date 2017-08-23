@@ -1,6 +1,6 @@
 NAME := tube
 DLIB := lib$(NAME)
-CXX := clang++
+CXX := g++
 
 DEPS := src/tube_server.h src/tube_server.cpp
 CPP_SHARED := -shared -fPIC
@@ -19,7 +19,7 @@ Linux:
 
 .PHONY: Darwin
 Darwin:
-	$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) $(CPP_OSX) \
+	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) $(CPP_OSX) \
 	-L/usr/local/lib/ \
 	-lpthread -luWS -lssl -lcrypto -lz -luv -o $(DLIB).dylib \
 	src/tube_server.cpp
@@ -48,5 +48,5 @@ clean:
 
 test: src/test_main.cpp default
 	@mkdir -p bin
-	$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_OSX) -L. -l$(NAME) -o bin/run_test $<
+	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_OSX) -L. -l$(NAME) -o bin/run_test $<
 	@bin/run_test
