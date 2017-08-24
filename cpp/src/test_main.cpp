@@ -83,8 +83,12 @@ void on_disconnect(TubeServer& ts, conn_id_t conn_id, const char *reason,
 
 void run_server() {
     uint32_t port = 8080;
-    TubeServer ts("key", "cert", port, SMART,
-                  on_rcv, on_connect, on_disconnect);
+    TubeServer ts(
+        //"/Users/chad/src/deercreeklabs/tube/keys/cert.pem",
+        //"/Users/chad/src/deercreeklabs/tube/keys/key.pem",
+        "/Users/chad/src/deercreeklabs/tube/keys/f1-chain.pem",
+        "/Users/chad/src/deercreeklabs/tube/keys/f1-private-key.pem",
+        port, SMART, on_rcv, on_connect, on_disconnect);
     cout << "Starting server on " << port << "." << endl;
     ts.serve();
 }

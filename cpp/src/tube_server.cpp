@@ -13,13 +13,18 @@
 
 using namespace std;
 
-TubeServer::TubeServer(const char *sslKey, const char *sslCert, uint32_t port,
+TubeServer::TubeServer(const char *ssl_chain_filename,
+                       const char *ssl_key_filename,
+                       uint32_t port,
                        CompressionType compression_type,
                        on_rcv_fn_t on_rcv_fn,
                        on_connect_fn_t on_connect_fn,
                        on_disconnect_fn_t on_disconnect_fn) {
     this->compression_type = compression_type;
     next_conn_id = 0;
+    uS::TLS::Context ssl_context = uS::TLS::createContext(ssl_chain_filename,
+                                                          ssl_key_filename,
+                                                          "");
     hub.onConnection(
         [this, on_connect_fn]
         (ws_t *ws, uWS::HttpRequest req) {
@@ -43,7 +48,9 @@ TubeServer::TubeServer(const char *sslKey, const char *sslCert, uint32_t port,
          size_t length, uWS::OpCode opCode) {
             onMessage(ws, message, length, opCode, on_rcv_fn);
         });
-    hub.listen(port);
+    if (!hub.listen(port)) {
+        throw runtime_error("Could not listen on port.");
+    };
 }
 
 void TubeServer::sendControlCode(ws_t *ws, uint_fast8_t code) {

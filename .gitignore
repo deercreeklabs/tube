@@ -33,3 +33,6 @@ tramp
 
 # Mac stuff
 .DS_Store
+
+# Security stuff
+/keys

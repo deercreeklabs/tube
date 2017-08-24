@@ -34,7 +34,9 @@ private:
                                  bool is_cur_msg_compressed);
 
 public:
-    TubeServer(const char *sslKey, const char *sslCert, uint32_t port,
+    TubeServer(const char *ssl_chain_filename,
+               const char *ssl_key_filename,
+               uint32_t port,
                CompressionType compression_type,
                on_rcv_fn_t on_rcv_fn,
                on_connect_fn_t on_connect_fn,
