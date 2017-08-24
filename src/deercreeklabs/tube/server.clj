@@ -35,7 +35,7 @@
             data (async/<! rcv-chan)
             [peer-fragment-size data] (u/read-zig-zag-encoded-int data)]
         (when (pos? (count data))
-          (throw (ex-info "Extra data recieved in negotiation header."
+          (throw (ex-info "Extra data in negotiation header."
                           {:type :execution-error
                            :subtype :extra-data-in-negotiation-header
                            :extra-data data

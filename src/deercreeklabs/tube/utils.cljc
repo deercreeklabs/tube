@@ -500,12 +500,12 @@
           (check-status status ret))
         :cljs
         (cljs.test/async done
-               (async/take! ch (fn [ret]
-                              (try
-                                (let [[status result] ret]
-                                  (check-status status result))
-                                (finally
-                                  (done))))))))))
+                         (async/take! ch (fn [ret]
+                                           (try
+                                             (let [[status result] ret]
+                                               (check-status status result))
+                                             (finally
+                                               (done))))))))))
 
 ;;;;;;;;;;;;;;;;;;;; Websocket helpers ;;;;;;;;;;;;;;;;;;;;
 
@@ -525,7 +525,8 @@
    :keep-alive-secs 30})
 
 (defn send-control-code [ws code]
-  (send-raw ws (byte-array [(bit-shift-left code 3)])))
+  (send-raw ws (byte-array [(bit-shift-left code 3)]))
+  nil)
 
 (defn send-ping [ws]
   (send-control-code ws 16))
@@ -533,24 +534,16 @@
 (defn send-pong [ws]
   (send-control-code ws 17))
 
-(s/defn set-num-frags! :- Nil
+(s/defn set-num-frags! :- (s/maybe ByteArray)
   [*num-fragments-in-msg :- s/Num
    data :- ByteArray]
   (let [num-frags (bit-and (aget #^bytes data 0) 0x07)
-        num-frags (if (pos? num-frags)
-                    num-frags
-                    (let [[num-frags extra-data] (read-zig-zag-encoded-int
-                                                  (slice-byte-array data 1))]
-                      (if (zero? (count extra-data))
-                        num-frags
-                        (throw
-                         (ex-info "Extra data recieved in message header."
-                                  {:type :execution-error
-                                   :subtype :extra-data-in-message-header
-                                   :extra-data extra-data
-                                   :extra-data-str
-                                   (byte-array->debug-str data)})))))]
-    (reset! *num-fragments-in-msg num-frags)))
+        rest-of-bytes (slice-byte-array data 1)
+        [num-frags extra-data] (if (pos? num-frags)
+                                 [num-frags rest-of-bytes]
+                                 (read-zig-zag-encoded-int rest-of-bytes))]
+    (reset! *num-fragments-in-msg num-frags)
+    extra-data))
 
 (defn make-handle-rcv
   [on-rcv rcv-chan *peer-fragment-size *ws]
@@ -563,15 +556,18 @@
         (async/put! rcv-chan data)
         (if (zero? @*num-fragments-in-msg)
           (let [masked (bit-and (aget #^bytes data 0) 0xf8)
-                code (bit-shift-right masked 3)]
-            (case code
-              0 (do (set-num-frags! *num-fragments-in-msg data)
-                    (reset! *decompress identity))
-              1 (do (set-num-frags! *num-fragments-in-msg data)
-                    (reset! *decompress inflate))
-              16 (do (debugf "Got ping from peer.")
-                     (send-pong @*ws))
-              17 (debugf "Got pong from peer.")))
+                code (bit-shift-right masked 3)
+                extra-data (case code
+                             0 (do (reset! *decompress identity)
+                                   (set-num-frags! *num-fragments-in-msg data))
+                             1 (do (reset! *decompress inflate)
+                                   (set-num-frags! *num-fragments-in-msg data))
+                             16 (do (debugf "Got ping from peer.")
+                                    (send-pong @*ws))
+                             17 (do (debugf "Got pong from peer.")
+                                    nil))]
+            (when extra-data
+              (recur extra-data)))
           (do
             (swap! *fragment-buffer conj data)
             (swap! *num-fragments-rcvd inc)
@@ -600,7 +596,9 @@
     (fn [data]
       (try
         (let [[compression-id compressed] (compress data)
-              frags (byte-array->fragments compressed @*peer-fragment-size)
+              frags (byte-array->fragments compressed
+                                           ;; leave room for header
+                                           (- @*peer-fragment-size 6))
               num-frags (count frags)
               _ (when (> num-frags max-num-fragments)
                   (throw (ex-info "Maximum message fragments exceeded."
@@ -613,8 +611,8 @@
                        (byte-array [(bit-or first-byte num-frags)])
                        (concat-byte-arrays
                         [(byte-array [first-byte])
-                         (int->zig-zag-encoded-byte-array num-frags)]))]
-          (ws-sender header)
+                         (int->zig-zag-encoded-byte-array num-frags)]))
+              frags (update frags 0 #(concat-byte-arrays [header %]))]
           (doseq [frag frags]
             (ws-sender frag)))
         (catch #?(:clj Exception :cljs :default) e
