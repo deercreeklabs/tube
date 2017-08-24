@@ -2,8 +2,11 @@
 #include "tube_server.h"
 #include "utils.h"
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <string>
+#include <utility>
+#include <vector>
 
 #define FRAGMENT_SIZE 200000
 
@@ -131,9 +134,47 @@ void TubeServer::close_conn(conn_id_t conn_id) {
     ws->close(1000, reason.c_str(), reason.size());
 }
 
+string make_header(uint_fast8_t compression_id, int32_t num_fragments) {
+    char first_byte = compression_id << 3;
+    if(num_fragments <= 7) {
+        first_byte |= num_fragments;
+        return string(1, first_byte);
+    } else {
+        char buf[6] = { 0, 0, 0, 0, 0, 0 };
+        uint_fast8_t len = encode_int(num_fragments, buf);
+        string encoded_num_frags(buf, len);
+        string header(1, first_byte);
+        return header + encoded_num_frags;
+    }
+}
+
+typedef pair<const char*, size_t> fragment_t;
+typedef vector<fragment_t> fragments_t;
+
 // TODO: Add compression
 void TubeServer::send(conn_id_t conn_id, const char* data) {
     ws_t *ws = this->conn_id_to_ws.at(conn_id);
     Connection& conn = this->ws_to_conn.at(ws);
-    cout << " SENDIN DATA LIKE A BALLER..." << endl;
+    size_t data_len = strlen(data);
+    // Leave room for header
+    size_t fragment_size = conn.peer_fragment_size - 6;
+    size_t offset = 0;
+    fragments_t fragments;
+    while(offset < data_len) {
+        const char* frag_ptr = data + offset;
+        offset += fragment_size;
+        size_t frag_len = (offset < data_len) ?
+            fragment_size : data_len - offset + fragment_size;
+        fragments.push_back(make_pair(frag_ptr, frag_len));
+    }
+    string header = make_header(0, fragments.size());
+    fragment_t first_frag = fragments[0];
+    string new_first_frag_str = header + string(first_frag.first,
+                                                first_frag.second);
+    fragments[0] = make_pair(new_first_frag_str.c_str(),
+                             new_first_frag_str.size());
+    cout << "Send. num_fragments: " << fragments.size() << endl;
+    for (auto const& fragment : fragments) {
+        ws->send(fragment.first, fragment.second, uWS::OpCode::BINARY);
+    }
 }

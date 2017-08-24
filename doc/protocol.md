@@ -46,7 +46,7 @@ message:
 The least-significant three bits of the first byte are interpreted as an
 *unsigned* three-bit integer which represents the number of
 fragments in the message. If the least-significant three bits are all zero,
-the number of fragments is specified by the next 1-5 bytes, which will be
+the number of fragments is specified by the next 1-6 bytes, which will be
 an zig-zag-varint-encoded signed integer. The maximum number of fragments is therefore
 2^31-1.
 

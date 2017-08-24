@@ -86,6 +86,6 @@ void run_server() {
 }
 
 int main (int argc, char *argv[]) {
-    run_unit_tests();
+    //run_unit_tests();
     run_server();
 }
