@@ -12,7 +12,7 @@ fragment size. 1-5 bytes in size.
 
 #### Server->Client Fragment Size Request
 Sent by server, in response to the initial client->server fragment size
-requrest. An zig-zag-varint-encoded signed integer representing the server's desired
+request. An zig-zag-varint-encoded signed integer representing the server's desired
 fragment size. 1-5 bytes in size.
 
 ## Messages

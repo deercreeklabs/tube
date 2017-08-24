@@ -4,8 +4,6 @@
 #include <iostream>
 #include <stdexcept>
 
-using namespace std;
-
 // Returns consumed buffer length
 uint_fast8_t encode_int(int32_t i, char *buffer) {
     uint32_t n = (i << 1) ^ (i >> 31); // Zig zag encode
@@ -21,16 +19,16 @@ uint_fast8_t encode_int(int32_t i, char *buffer) {
     }
 }
 
-int32_t decode_int(char *buffer) {
+int32_t decode_int(const char *buffer, uint32_t *num_bytes_consumed) {
     uint32_t encoded = 0;
     uint8_t shift = 0;
     uint8_t u;
-    uint32_t buf_idx = 0;
+    *num_bytes_consumed = 0;
     do {
         if (shift >= 32) {
-            throw invalid_argument("Invalid Avro varint");
+            throw std::invalid_argument("Invalid Avro varint");
         }
-        u = buffer[buf_idx++];
+        u = buffer[(*num_bytes_consumed)++];
         encoded |= static_cast<uint32_t>(u & 0x7f) << shift;
         shift += 7;
     } while (u & 0x80);

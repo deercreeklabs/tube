@@ -2,7 +2,7 @@ NAME := tube
 DLIB := lib$(NAME)
 CXX := g++
 
-DEPS := src/tube_server.h src/tube_server.cpp
+DEPS := src/tube_server.h src/tube_server.cpp src/utils.h src/connection.h
 CPP_SHARED := -shared -fPIC
 CPP_OPENSSL_OSX := -L/usr/local/opt/openssl/lib -I/usr/local/opt/openssl/include
 CPP_OSX := -stdlib=libc++ -mmacosx-version-min=10.7 -undefined dynamic_lookup $(CPP_OPENSSL_OSX) -I/usr/local/include

@@ -1,25 +1,17 @@
+#include <uWS/uWS.h>  // Needs to be first for some reason
+
 #include "tube_server.h"
 #include "utils.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstdint>
 #include <iostream>
 #include <string>
 
 
+
 using namespace std;
 
-
-void on_rcv (ws_t *ws, void *data, uint32_t length) {
-    cout << "got data on ws. " << endl;
-}
-
-void on_connect (ws_t *ws) {
-    cout << "on_connect " << endl;
-}
-
-void on_disconnect (ws_t *ws, const char *reason) {
-    cout << "conn disconnected. Reason: " << reason << endl;
-}
 
 void test_encode_decode() {
     int32_t data[] = {0, -1, 1, 100, -100, 1000, 10000};
@@ -55,7 +47,8 @@ void test_encode_decode() {
 
     cout << "Testing varint-zz decoding:" << endl;
     for(uint_fast8_t i=0; i < num_cases; ++i) {
-        int32_t n = decode_int(encoded[i]);
+        uint32_t num_bytes_consumed;
+        int32_t n = decode_int(encoded[i], &num_bytes_consumed);
         if(n == data[i]) {
             cout << ".";
         } else {
@@ -72,6 +65,21 @@ void run_unit_tests() {
     test_encode_decode();
 }
 
+void on_rcv (ws_t *ws, const char *data, uint32_t length) {
+    cout << "got data on ws. " << endl;
+    string msg(data, length);
+    reverse(msg.begin(), msg.end());
+    ws->send(msg.c_str(), msg.size(), uWS::OpCode::BINARY);;
+}
+
+void on_connect (ws_t *ws) {
+    cout << "on_connect " << endl;
+}
+
+void on_disconnect (ws_t *ws, const char *reason) {
+    cout << "conn disconnected. Reason: " << reason << endl;
+}
+
 void run_server() {
     uint32_t port = 8080;
     cout << "Starting server on " << port << "." << endl;
@@ -81,5 +89,5 @@ void run_server() {
 
 int main (int argc, char *argv[]) {
     run_unit_tests();
-    //run_server();
+    run_server();
 }
