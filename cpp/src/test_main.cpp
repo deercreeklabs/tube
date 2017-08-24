@@ -1,5 +1,3 @@
-#include <uWS/uWS.h>  // Needs to be first for some reason
-
 #include "tube_server.h"
 #include "utils.h"
 #include <algorithm>
@@ -65,26 +63,26 @@ void run_unit_tests() {
     test_encode_decode();
 }
 
-void on_rcv (ws_t *ws, const char *data, uint32_t length) {
-    cout << "got data on ws. " << endl;
-    string msg(data, length);
+void on_rcv(TubeServer& ts, conn_id_t conn_id, const char *data) {
+    string msg(data);
     reverse(msg.begin(), msg.end());
-    ws->send(msg.c_str(), msg.size(), uWS::OpCode::BINARY);;
+    ts.send(conn_id, msg.c_str());
 }
 
-void on_connect (ws_t *ws) {
-    cout << "on_connect " << endl;
+void on_connect(TubeServer& ts, conn_id_t conn_id) {
+    cout << "on_connect. conn_id: " << conn_id << endl;
 }
 
-void on_disconnect (ws_t *ws, const char *reason) {
-    cout << "conn disconnected. Reason: " << reason << endl;
+void on_disconnect(TubeServer& ts, conn_id_t conn_id, const char *reason) {
+    cout << "conn_id " << conn_id << " disconnected. Reason: ";
+    cout << reason << endl;
 }
 
 void run_server() {
     uint32_t port = 8080;
     cout << "Starting server on " << port << "." << endl;
-    TubeServer ts("key", "cert", port,
-                  on_rcv, on_connect, on_disconnect);
+    TubeServer ts("key", "cert", port, on_rcv, on_connect, on_disconnect);
+    ts.serve();
 }
 
 int main (int argc, char *argv[]) {

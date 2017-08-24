@@ -1,8 +1,19 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <uWS/uWS.h>  // Needs to be first for some reason
+
 #include <iostream>
 #include <stdexcept>
+
+class TubeServer;
+
+typedef uint32_t conn_id_t;
+typedef uWS::WebSocket<uWS::SERVER> ws_t;
+typedef void on_rcv_fn_t (TubeServer& ts, conn_id_t conn_id, const char *data);
+typedef void on_connect_fn_t (TubeServer& ts, conn_id_t conn_id);
+typedef void on_disconnect_fn_t (TubeServer& ts, conn_id_t conn_id,
+                                 const char *reason);
 
 // Returns consumed buffer length
 uint_fast8_t encode_int(int32_t i, char *buffer) {

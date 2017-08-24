@@ -57,14 +57,14 @@
           rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 1000000)]
       (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp)))))))
 
-#?(:clj  ;; File ops are currently only defined for clj
-   (deftest test-round-trip-w-large-msg
-     (u/test-async
-      10000
-      (go-sf
-       (let [msg (u/read-byte-array-from-file "lots_o_bytes.bin")
-             rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 10000)]
-         (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp))))))))
+;; #?(:clj  ;; File ops are currently only defined for clj
+;;    (deftest test-round-trip-w-large-msg
+;;      (u/test-async
+;;       10000
+;;       (go-sf
+;;        (let [msg (u/read-byte-array-from-file "lots_o_bytes.bin")
+;;              rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 10000)]
+;;          (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp))))))))
 
 (deftest test-encode-decode
   (let [data [[0 [0]]
