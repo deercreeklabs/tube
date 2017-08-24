@@ -51,7 +51,7 @@
 
 (deftest test-round-trip-w-small-msg
   (u/test-async
-   1000
+   5000
    (go-sf
     (let [msg (u/byte-array [72,101,108,108,111,32,119,111,114,108,100,33])
           rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 1000000)]
@@ -66,7 +66,10 @@
              rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 10000)
              rev (u/reverse-byte-array rsp)
              m100 (u/slice-byte-array msg 0 100)
-             r100 (u/slice-byte-array rev 0 100)]
+             r100 (u/slice-byte-array rev 0 100)
+             msg-size (count msg)
+             rsp-size (count rsp)]
+         (is (= msg-size rsp-size))
          (is (u/equivalent-byte-arrays? m100 r100)))))))
 
 (deftest test-encode-decode

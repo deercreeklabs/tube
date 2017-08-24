@@ -11,7 +11,7 @@
 (def StopperFn (s/=> s/Any))
 (def Handler (s/=> s/Any))
 
-(def fragment-size 200000)
+(def fragment-size 32000)
 
 (def default-server-ws-options
   (assoc u/default-websocket-options
@@ -83,8 +83,8 @@
   (let [handler (bidi.ring/make-handler ["/" routes])
         options {:port port
                  :thread (.availableProcessors (Runtime/getRuntime))}
-        _ (infof "Starting server on port %s." port)
         stopper (org.httpkit.server/run-server handler options)
+        _ (infof "Server started on port %s." port)
         stopper #(do (infof "Stopping server on port %s." port)
                      (stopper))]
     stopper))
@@ -92,6 +92,7 @@
 (s/defn run-reverser-server :- StopperFn
   ([] (run-reverser-server 8080))
   ([port]
+   (u/configure-logging)
    (let [routes {"" (make-ws-handler)}
          stop-server (serve port routes)]
      stop-server)))

@@ -1,12 +1,13 @@
 NAME := tube
 DLIB := lib$(NAME)
-CXX := g++
 
 DEPS := src/tube_server.h src/tube_server.cpp src/utils.h src/connection.h
 CPP_SHARED := -shared -fPIC
 CPP_OPENSSL_OSX := -L/usr/local/opt/openssl/lib -I/usr/local/opt/openssl/include
-CPP_OSX := -stdlib=libc++ -mmacosx-version-min=10.7 -undefined dynamic_lookup $(CPP_OPENSSL_OSX) -I/usr/local/include
-CPPFLAGS := $(CPPFLAGS) -std=c++11 -O3 -I src
+CPP_OSX := -stdlib=libc++ -mmacosx-version-min=10.7 -undefined dynamic_lookup \
+	$(CPP_OPENSSL_OSX) -I/usr/local/include
+CPPFLAGS := $(CPPFLAGS) -std=c++11 -O3 -I src \
+	-L/usr/local/lib/ -lpthread -luWS -lssl -lcrypto -lz -luv
 
 
 .PHONY: default
@@ -15,14 +16,13 @@ default: $(DEPS)
 
 .PHONY: Linux
 Linux:
-	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) -L/usr/local/lib -luWS -s -o $(DLIB).so src/tube_server.cpp
+	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) \
+	  -s -o $(DLIB).so src/tube_server.cpp
 
 .PHONY: Darwin
 Darwin:
 	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_SHARED) $(CPP_OSX) \
-	-L/usr/local/lib/ \
-	-lpthread -luWS -lssl -lcrypto -lz -luv -o $(DLIB).dylib \
-	src/tube_server.cpp
+	  -o $(DLIB).dylib src/tube_server.cpp
 
 .PHONY: install
 install:
@@ -30,7 +30,9 @@ install:
 
 .PHONY: installLinux
 installLinux:
-	@if [ -d "/usr/lib64" ]; then cp $(DLIB).so /usr/lib64/; else cp $(DLIB).so /usr/lib/; fi
+	@if [ -d "/usr/lib64" ]; \
+	  then cp $(DLIB).so /usr/lib64/; \
+	  else cp $(DLIB).so /usr/lib/; fi
 	@mkdir -p /usr/include/$(DLIB)
 	@cp src/*.h /usr/include/$(DLIB)/
 
@@ -48,5 +50,6 @@ clean:
 
 test: src/test_main.cpp default
 	@mkdir -p bin
-	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_OSX) -L. -l$(NAME) -o bin/run_test $<
+	@$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_OSX) -L. -l$(NAME) \
+	  -o bin/run_test $<
 	@bin/run_test

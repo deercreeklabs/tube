@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <string>
-
 
 
 using namespace std;
@@ -63,25 +63,29 @@ void run_unit_tests() {
     test_encode_decode();
 }
 
-void on_rcv(TubeServer& ts, conn_id_t conn_id, const char *data) {
-    string msg(data);
+void on_rcv(TubeServer& ts, conn_id_t conn_id, const char *data,
+            uint32_t length) {
+    cout << "on_rcv got " << length << " bytes." << endl;
+    string msg(data, length);
     reverse(msg.begin(), msg.end());
-    ts.send(conn_id, msg.c_str());
+    ts.send(conn_id, msg.data(), msg.size());
 }
 
 void on_connect(TubeServer& ts, conn_id_t conn_id) {
     cout << "on_connect. conn_id: " << conn_id << endl;
 }
 
-void on_disconnect(TubeServer& ts, conn_id_t conn_id, const char *reason) {
+void on_disconnect(TubeServer& ts, conn_id_t conn_id, const char *reason,
+                   uint32_t length) {
     cout << "conn_id " << conn_id << " disconnected. Reason: ";
-    cout << reason << endl;
+    cout << string(reason, length) << endl;
 }
 
 void run_server() {
     uint32_t port = 8080;
+    TubeServer ts("key", "cert", port, SMART,
+                  on_rcv, on_connect, on_disconnect);
     cout << "Starting server on " << port << "." << endl;
-    TubeServer ts("key", "cert", port, on_rcv, on_connect, on_disconnect);
     ts.serve();
 }
 

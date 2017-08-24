@@ -40,8 +40,11 @@ struct Connection
         for (auto const& fragment : fragment_buffer) { result += fragment; }
         fragment_buffer.clear();
         num_fragments_expected = 0;
-        // TODO: check is_cur_msg_compressed and decompress as needed
-        return result;
+        if(is_cur_msg_compressed) {
+            return decompress(result);
+        } else {
+            return result;
+        }
     }
 
     bool areAllFragmentsRcvd() {
