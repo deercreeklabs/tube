@@ -1,3 +1,8 @@
 .PHONY: classes
-classes: doc/capsule.avsc
-	java -jar /opt/avro/avro-tools.jar compile -string schema $< src/java/
+classes:
+	java -jar /opt/avro/avro-tools.jar compile -string schema \
+	  doc/Capsule.avsc src/java/
+	java -jar /opt/avro/avro-tools.jar compile -string schema \
+	  doc/LoginReq.avsc src/java/
+	java -jar /opt/avro/avro-tools.jar compile -string schema \
+	  doc/LoginRsp.avsc src/java/

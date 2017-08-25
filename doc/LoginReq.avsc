@@ -1,0 +1,6 @@
+{"namespace": "mydomain",
+ "name": "LoginReq",
+ "type": "record",
+ "fields": [
+   {"name": "username", "type": ["null", "string"], "default": null},
+   {"name": "password", "type": ["null", "string"], "default": null}]}

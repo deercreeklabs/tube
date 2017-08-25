@@ -1,0 +1,5 @@
+{"namespace": "mydomain",
+ "name": "LoginRsp",
+ "type": "record",
+ "fields": [
+   {"name": "was_successful", "type": "boolean"}]}
