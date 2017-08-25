@@ -5,6 +5,10 @@
             :url "http://www.apache.org/licenses/LICENSE-2.0"}
   :lein-release {:scm :git
                  :deploy-via :clojars}
+  :pedantic? :abort
+  :source-paths ["src/clj"]
+  :java-source-paths ["src/java"]
+
   :profiles
   {:dev
    {:plugins
@@ -17,8 +21,6 @@
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
-  :pedantic? :abort
-
   :dependencies
   [[bidi "2.1.2"]
    [cljsjs/nodejs-externs "1.0.4-1"]
@@ -28,6 +30,7 @@
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
    [http-kit "2.2.0"]
+   [org.apache.avro/avro "1.8.2" :exclusions [org.slf4j/slf4j-api]]
    [org.clojure/clojure "1.8.0"]
    [org.clojure/clojurescript "1.9.908"]
    [org.clojure/core.async "0.3.443"]

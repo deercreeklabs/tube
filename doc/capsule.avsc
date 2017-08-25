@@ -1,0 +1,7 @@
+{"namespace": "tube",
+ "name": "Capsule",
+ "type": "record",
+ "fields": [
+   {"name": "msg_type_id", "type": "int"},
+   {"name": "msg_data", "type": ["null", "bytes"], "default": null},
+   {"name": "msg_schema", "type": ["null", "string"], "default": null}]}
