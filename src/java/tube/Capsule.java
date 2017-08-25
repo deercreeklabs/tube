@@ -14,7 +14,7 @@ import org.apache.avro.message.SchemaStore;
 @org.apache.avro.specific.AvroGenerated
 public class Capsule extends org.apache.avro.specific.SpecificRecordBase implements org.apache.avro.specific.SpecificRecord {
   private static final long serialVersionUID = 8253121607404728445L;
-  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"Capsule\",\"namespace\":\"tube\",\"fields\":[{\"name\":\"msg_type_id\",\"type\":\"int\"},{\"name\":\"msg_data\",\"type\":[\"null\",\"bytes\"],\"default\":null},{\"name\":\"msg_schema\",\"type\":[\"null\",\"string\"],\"default\":null}]}");
+  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"Capsule\",\"namespace\":\"tube\",\"fields\":[{\"name\":\"msg_type_id\",\"type\":\"int\"},{\"name\":\"msg_data\",\"type\":[\"null\",\"bytes\"],\"default\":null},{\"name\":\"msg_schema\",\"type\":[\"null\",{\"type\":\"string\",\"avro.java.string\":\"String\"}],\"default\":null}]}");
   public static org.apache.avro.Schema getClassSchema() { return SCHEMA$; }
 
   private static SpecificData MODEL$ = new SpecificData();
@@ -53,7 +53,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
 
   @Deprecated public int msg_type_id;
   @Deprecated public java.nio.ByteBuffer msg_data;
-  @Deprecated public java.lang.CharSequence msg_schema;
+  @Deprecated public java.lang.String msg_schema;
 
   /**
    * Default constructor.  Note that this does not initialize fields
@@ -68,7 +68,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
    * @param msg_data The new value for msg_data
    * @param msg_schema The new value for msg_schema
    */
-  public Capsule(java.lang.Integer msg_type_id, java.nio.ByteBuffer msg_data, java.lang.CharSequence msg_schema) {
+  public Capsule(java.lang.Integer msg_type_id, java.nio.ByteBuffer msg_data, java.lang.String msg_schema) {
     this.msg_type_id = msg_type_id;
     this.msg_data = msg_data;
     this.msg_schema = msg_schema;
@@ -91,7 +91,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
     switch (field$) {
     case 0: msg_type_id = (java.lang.Integer)value$; break;
     case 1: msg_data = (java.nio.ByteBuffer)value$; break;
-    case 2: msg_schema = (java.lang.CharSequence)value$; break;
+    case 2: msg_schema = (java.lang.String)value$; break;
     default: throw new org.apache.avro.AvroRuntimeException("Bad index");
     }
   }
@@ -132,7 +132,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
    * Gets the value of the 'msg_schema' field.
    * @return The value of the 'msg_schema' field.
    */
-  public java.lang.CharSequence getMsgSchema() {
+  public java.lang.String getMsgSchema() {
     return msg_schema;
   }
 
@@ -140,7 +140,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
    * Sets the value of the 'msg_schema' field.
    * @param value the value to set.
    */
-  public void setMsgSchema(java.lang.CharSequence value) {
+  public void setMsgSchema(java.lang.String value) {
     this.msg_schema = value;
   }
 
@@ -178,7 +178,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
 
     private int msg_type_id;
     private java.nio.ByteBuffer msg_data;
-    private java.lang.CharSequence msg_schema;
+    private java.lang.String msg_schema;
 
     /** Creates a new Builder */
     private Builder() {
@@ -306,7 +306,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
       * Gets the value of the 'msg_schema' field.
       * @return The value.
       */
-    public java.lang.CharSequence getMsgSchema() {
+    public java.lang.String getMsgSchema() {
       return msg_schema;
     }
 
@@ -315,7 +315,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
       * @param value The value of 'msg_schema'.
       * @return This builder.
       */
-    public tube.Capsule.Builder setMsgSchema(java.lang.CharSequence value) {
+    public tube.Capsule.Builder setMsgSchema(java.lang.String value) {
       validate(fields()[2], value);
       this.msg_schema = value;
       fieldSetFlags()[2] = true;
@@ -348,7 +348,7 @@ public class Capsule extends org.apache.avro.specific.SpecificRecordBase impleme
         Capsule record = new Capsule();
         record.msg_type_id = fieldSetFlags()[0] ? this.msg_type_id : (java.lang.Integer) defaultValue(fields()[0]);
         record.msg_data = fieldSetFlags()[1] ? this.msg_data : (java.nio.ByteBuffer) defaultValue(fields()[1]);
-        record.msg_schema = fieldSetFlags()[2] ? this.msg_schema : (java.lang.CharSequence) defaultValue(fields()[2]);
+        record.msg_schema = fieldSetFlags()[2] ? this.msg_schema : (java.lang.String) defaultValue(fields()[2]);
         return record;
       } catch (java.lang.Exception e) {
         throw new org.apache.avro.AvroRuntimeException(e);
