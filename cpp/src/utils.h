@@ -8,10 +8,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <uWS/uWS.h>  // Needs to be first for some reason
+#include "server_wss.hpp"
 
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -19,13 +20,22 @@
 
 class TubeServer;
 
-typedef uint32_t conn_id_t;
-typedef uWS::WebSocket<uWS::SERVER> ws_t;
-typedef void on_rcv_fn_t (TubeServer& ts, conn_id_t conn_id, const char *data,
-                          uint32_t length);
-typedef void on_connect_fn_t (TubeServer& ts, conn_id_t conn_id);
-typedef void on_disconnect_fn_t (TubeServer& ts, conn_id_t conn_id,
-                                 const char *reason, uint32_t length);
+enum CompressionType {
+    NONE,
+    SMART,
+    DEFLATE
+};
+
+typedef SimpleWeb::SocketServer<SimpleWeb::WSS> WssServer;
+
+typedef std::string conn_id_t;
+typedef void on_rcv_fn_t(TubeServer& ts, conn_id_t conn_id,
+                         const std::string& data);
+typedef void on_connect_fn_t(TubeServer& ts, conn_id_t conn_id,
+                             const std::string path,
+                              const std::string remote_address);
+typedef void on_disconnect_fn_t(TubeServer& ts, conn_id_t conn_id, int code,
+                                std::string reason);
 
 // Returns consumed buffer length
 uint_fast8_t encode_int(int32_t i, char *buffer) {
@@ -42,7 +52,7 @@ uint_fast8_t encode_int(int32_t i, char *buffer) {
     }
 }
 
-int32_t decode_int(const char *buffer, uint32_t *num_bytes_consumed) {
+int32_t decode_int(const std::string& in, uint32_t *num_bytes_consumed) {
     uint32_t encoded = 0;
     uint8_t shift = 0;
     uint8_t u;
@@ -51,7 +61,7 @@ int32_t decode_int(const char *buffer, uint32_t *num_bytes_consumed) {
         if (shift >= 32) {
             throw std::invalid_argument("Invalid Avro varint");
         }
-        u = buffer[(*num_bytes_consumed)++];
+        u = in[(*num_bytes_consumed)++];
         encoded |= static_cast<uint32_t>(u & 0x7f) << shift;
         shift += 7;
     } while (u & 0x80);

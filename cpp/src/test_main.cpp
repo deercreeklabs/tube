@@ -63,31 +63,28 @@ void run_unit_tests() {
     test_encode_decode();
 }
 
-void on_rcv(TubeServer& ts, conn_id_t conn_id, const char *data,
-            uint32_t length) {
-    cout << "on_rcv got " << length << " bytes." << endl;
-    string msg(data, length);
-    reverse(msg.begin(), msg.end());
-    ts.send(conn_id, msg.data(), msg.size());
+void on_rcv(TubeServer& ts, conn_id_t conn_id, const string& data) {
+    cout << "on_rcv got " << data.size() << " bytes." << endl;
+    auto new_data = string(data);
+    reverse(new_data.begin(), new_data.end());
+    ts.send(conn_id, new_data);
 }
 
-void on_connect(TubeServer& ts, conn_id_t conn_id) {
-    cout << "on_connect. conn_id: " << conn_id << endl;
+void on_connect(TubeServer& ts, conn_id_t conn_id, const string path,
+                const string remote_address) {
+    cout << "on_connect (" << path << ") conn_id: " << conn_id << endl;
 }
 
-void on_disconnect(TubeServer& ts, conn_id_t conn_id, const char *reason,
-                   uint32_t length) {
+void on_disconnect(TubeServer& ts, conn_id_t conn_id, int code, string reason) {
     cout << "conn_id " << conn_id << " disconnected. Reason: ";
-    cout << string(reason, length) << endl;
+    cout << reason << endl;
 }
 
 void run_server() {
     uint32_t port = 8080;
     TubeServer ts(
-        //"/Users/chad/src/deercreeklabs/tube/keys/cert.pem",
-        //"/Users/chad/src/deercreeklabs/tube/keys/key.pem",
-        "/Users/chad/src/deercreeklabs/tube/keys/f1-chain.pem",
-        "/Users/chad/src/deercreeklabs/tube/keys/f1-private-key.pem",
+        "/Users/chad/src/deercreeklabs/tube/keys/f1-chain.crt",
+        "/Users/chad/src/deercreeklabs/tube/keys/f1-private.pem",
         port, SMART, on_rcv, on_connect, on_disconnect);
     cout << "Starting server on " << port << "." << endl;
     ts.serve();

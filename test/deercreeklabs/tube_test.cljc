@@ -4,6 +4,7 @@
     :refer [alts! #?@(:clj [go])]]
    [clojure.test :refer [deftest is use-fixtures]]
    [deercreeklabs.tube.client :as tube-client]
+   [deercreeklabs.tube.jetty :as jetty]
    [deercreeklabs.tube.utils :as u :refer [#?@(:clj [go-sf])]]
    [schema.core :as s :include-macros true]
    [schema.test :as st]
@@ -11,7 +12,10 @@
   #?(:cljs
      (:require-macros
       [cljs.core.async.macros :refer [go]]
-      [deercreeklabs.tube.utils :refer [go-sf]])))
+      [deercreeklabs.tube.utils :refer [go-sf]])
+     :clj
+     (:import
+        (org.eclipse.jetty.server Server))))
 
 ;; Use this instead of fixtures, which are hard to make work w/ async testing.
 ;;(s/set-fn-validation! true)
@@ -27,7 +31,7 @@
 
 (defn <send-ws-msg-and-return-rsp [msg timeout]
   (u/go-sf
-   (let [url (str "ws://localhost:" port)
+   (let [url (str "wss://localhost:" port)
          client-rcv-ch (async/chan)
          connected-ch (async/chan)
          client-options {:on-connect (fn [ws]
@@ -49,6 +53,7 @@
                         :timeout timeout}))
        ret))))
 
+
 (deftest test-round-trip-w-small-msg
   (u/test-async
    5000
@@ -57,6 +62,7 @@
           rsp (u/call-sf! <send-ws-msg-and-return-rsp msg 1000000)]
       (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp)))))))
 
+#_
 #?(:clj  ;; File ops are currently only defined for clj
    (deftest test-round-trip-w-large-msg
      (u/test-async
@@ -71,7 +77,7 @@
              rsp-size (count rsp)]
          (is (= msg-size rsp-size))
          (is (u/equivalent-byte-arrays? m100 r100)))))))
-
+#_
 (deftest test-encode-decode
   (let [data [[0 [0]]
               [-1 [1]]
@@ -87,3 +93,18 @@
         (is (u/equivalent-byte-arrays? expected-ba ba))
         (is (= num decoded))
         (is (nil? rest))))))
+#_
+(deftest test-wss-server
+  (u/configure-logging)
+  (let [keystore-path "/Users/chad/Desktop/keystore.jks"
+        keystore-password "password"
+        on-connect (fn [id path remote-addr]
+                     (debugf "Got conn %s to %s on %s" id remote-addr path))
+        on-disconnect (constantly :disconnected)
+        on-rcv (constantly nil)
+        server (jetty/serve 8000 keystore-path keystore-password
+                            on-connect on-disconnect on-rcv)]
+    (is (= nil server))
+    (Thread/sleep (* 1000 100))
+    (infof "Stopping server...")
+    (.stop ^Server server)))

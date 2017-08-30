@@ -29,12 +29,16 @@
    [com.andrewmcveigh/cljs-time "0.5.1"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
+   [com.fzakaria/slf4j-timbre "0.3.7"]
    [http-kit "2.2.0"]
-   [org.apache.avro/avro "1.8.2" :exclusions [org.slf4j/slf4j-api]]
+   [javax.websocket/javax.websocket-api "1.1"]
+   [org.apache.avro/avro "1.8.2"]
    [org.clojure/clojure "1.8.0"]
    [org.clojure/clojurescript "1.9.908"]
    [org.clojure/core.async "0.3.443"]
+   [org.eclipse.jetty.websocket/websocket-server "9.4.7.RC0"]
    [prismatic/schema "1.1.6"]
+   [org.java-websocket/Java-WebSocket "1.3.4"]
    [stylefruits/gniazdo "1.0.1"]]
 
   :global-vars {*warn-on-reflection* true}

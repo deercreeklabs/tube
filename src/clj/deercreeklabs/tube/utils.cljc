@@ -425,7 +425,8 @@
    {:level :debug
     :output-fn short-log-output-fn
     :appenders
-    {:println {:ns-blacklist ["io.netty.*" "io.atomix.*"]}}}))
+    {:println {:ns-blacklist
+               ["io.netty.*" "io.atomix.*" "org.eclipse.jetty.*"]}}}))
 
 ;;;;;;;;;;;;;;;;;;;; core.async utils ;;;;;;;;;;;;;;;;;;;;
 
