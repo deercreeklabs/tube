@@ -17,14 +17,16 @@
    (org.java_websocket.server DefaultSSLWebSocketServerFactory
                               WebSocketServer)))
 
-(def fragment-size (* 1024 32))
+(primitive-math/use-primitive-operators)
+
+(def fragment-size 32000)
 
 (defprotocol ITubeServer
   (start [this] "Start serving")
   (stop [this] "Stop serving")
   (get-conn-count [this] "Return the number of current connections"))
 
-(defrecord TubeServer [*conn-id->conn ws-server]
+(deftype TubeServer [*conn-id->conn ws-server]
   ITubeServer
   (start [this]
     (.start ^WebSocketServer ws-server))

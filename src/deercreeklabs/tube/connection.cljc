@@ -2,12 +2,16 @@
   (:refer-clojure :exclude [send])
   (:require
    [deercreeklabs.tube.utils :as u]
+   [primitive-math]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   #?(:clj
      (:import
       (java.io ByteArrayOutputStream))))
 
-(def max-num-fragments 2147483647)  ;; 2^31-1
+#?(:clj
+   (primitive-math/use-primitive-operators))
+
+(def max-num-fragments 2147483647) ;; 2^31-1
 (defn make-control-code [x]
   (u/byte-array [(bit-shift-left x 3)]))
 (def ping-control-code (make-control-code 16))
@@ -27,7 +31,7 @@
   (handle-ready-end* [this data compressed?] "Internal use only")
   (handle-msg-in-flight* [this data] "Internal use only"))
 
-(defrecord Connection
+(deftype Connection
     [conn-id sender closer fragment-size compress client? output-stream
      *on-rcv *state *peer-fragment-size *num-fragments-expected
      *num-fragments-rcvd *cur-msg-compressed?]
@@ -45,9 +49,9 @@
     (let [[compression-id compressed] (compress data)
           frags (u/byte-array->fragments compressed
                                          ;; leave room for header
-                                         (- @*peer-fragment-size 6))
+                                         (- (int @*peer-fragment-size) 6))
           num-frags (count frags)
-          _ (when (> num-frags max-num-fragments)
+          _ (when (> num-frags (int max-num-fragments))
               (throw (ex-info "Maximum message fragments exceeded."
                               {:type :illegal-argument
                                :subtype :too-many-fragments
@@ -120,7 +124,7 @@
   (handle-msg-in-flight* [this data]
     #?(:clj (.write ^ByteArrayOutputStream output-stream data 0 (count data))
        :cljs (swap! output-stream conj data))
-    (swap! *num-fragments-rcvd inc)
+    (swap! *num-fragments-rcvd #(inc (int %))) ;; anon fn for prim math
     (when (= @*num-fragments-rcvd @*num-fragments-expected)
       #?(:clj (.flush ^ByteArrayOutputStream output-stream))
       (reset! *state :ready)

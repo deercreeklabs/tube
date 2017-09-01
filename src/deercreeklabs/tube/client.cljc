@@ -15,11 +15,13 @@
       (org.java_websocket.client WebSocketClient)
       (org.java_websocket.handshake ServerHandshake))))
 
+#?(:clj
+   (primitive-math/use-primitive-operators))
 
 (defn start-keep-alive-loop [conn keep-alive-secs *shutdown]
   (u/go-sf
    (while (not @*shutdown)
-     (ca/<! (ca/timeout (int (* 1000 keep-alive-secs))))
+     (ca/<! (ca/timeout (* 1000 (int keep-alive-secs))))
      ;; check again in case shutdown happened while we were waiting
      (when-not @*shutdown
        (connection/send-ping conn)))))
@@ -28,7 +30,7 @@
   (send [this data] "Send binary bytes over this tube")
   (close [this] [this code reason] "Close this tube"))
 
-(defrecord TubeClient [conn]
+(deftype TubeClient [conn]
   ITubeClient
   (send [this data]
     (connection/send conn data))
@@ -62,8 +64,8 @@
      (u/go-sf
       (let [fragment-size 31999
             on-bin (fn [bs offset length]
-                     (let [data (u/slice-byte-array bs offset
-                                                    (+ offset length))]
+                     (let [data (u/slice-byte-array
+                                 bs offset (+ (int offset) (int length)))]
                        (@*handle-rcv data)))
             socket (ws/connect
                     uri

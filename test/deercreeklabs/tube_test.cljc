@@ -15,7 +15,7 @@
       [deercreeklabs.tube.utils :refer [go-sf]])))
 
 ;; Use this instead of fixtures, which are hard to make work w/ async testing.
-;;(s/set-fn-validation! true)
+(s/set-fn-validation! false)
 
 (u/configure-logging)
 

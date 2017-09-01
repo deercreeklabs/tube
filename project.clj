@@ -35,6 +35,7 @@
    [org.clojure/core.async "0.3.443"]
    [org.java-websocket/Java-WebSocket "1.3.4"]
    [prismatic/schema "1.1.6"]
+   [primitive-math "0.1.6"]
    [stylefruits/gniazdo "1.0.1"]]
 
   :cljsbuild
