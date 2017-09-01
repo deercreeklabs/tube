@@ -49,25 +49,6 @@
   [& syms]
   (zipmap (map keyword syms) syms))
 
-;;;;;;;;;;;;;;;;;;;; Protocols and Records ;;;;;;;;;;;;;;;;;;;;
-
-(defprotocol IWebSocket
-  (send [this data] "Sends data (a byte array) over the websocket")
-  (send-raw [this data] "Sends raw data w/o header, etc. Internal use only.")
-  (disconnect [this] "Disconnects the websocket"))
-
-(defrecord WebSocket [peer-addr sender raw-sender closer]
-  IWebSocket
-  (send [this data]
-    (sender data))
-  (send-raw [this data]
-    (raw-sender data))
-  (disconnect [this]
-    (closer)))
-
-(defn make-websocket [peer-addr sender raw-sender closer]
-  (->WebSocket peer-addr sender raw-sender closer))
-
 ;;;;;;;;;;;;;;;;;;;; Schemas ;;;;;;;;;;;;;;;;;;;;
 
 (def Nil (s/eq nil))
@@ -82,15 +63,6 @@
   (s/if integer?
     s/Num
     [s/Any]))
-
-(def WebSocketOptions
-  {(s/optional-key :on-connect) (s/=> WebSocket)
-   (s/optional-key :on-disconnect) (s/=> WebSocket s/Str)
-   (s/optional-key :on-rcv) (s/=> WebSocket ByteArray)
-   (s/optional-key :on-error) (s/=> WebSocket s/Str)
-   (s/optional-key :compression-type) (s/maybe
-                                       (s/enum :none :smart :deflate))
-   (s/optional-key :keep-alive-secs) s/Num})
 
 (def Channel (s/protocol cap/Channel))
 
@@ -262,7 +234,7 @@
           (recur (int end-offset)
                  (conj output fragment)))))))
 
-(s/defn read-zig-zag-encoded-int :- [(s/one s/Int :int)
+(s/defn decode-int :- [(s/one s/Int :int)
                                      (s/optional ByteArray :unread-remainder)]
   "Takes an zig-zag encoded byte array and reads an integer from it.
    Returns a vector of the integer and, optionally, any unread bytes."
@@ -292,7 +264,7 @@
                        :subtype :var-len-num-more-than-32-bits
                        :i i}))))))))
 
-(s/defn int->zig-zag-encoded-byte-array :- ByteArray
+(s/defn encode-int :- ByteArray
   "Zig zag encodes an integer. Returns the encoded bytes."
   [i :- s/Int]
   (let [zz-n (bit-xor (bit-shift-left i 1) (bit-shift-right i 31))]
@@ -348,6 +320,14 @@
             (signed-byte-array->unsigned-byte-array)
             (.inflate pako)
             (unsigned-byte-array->signed-byte-array)))))
+
+(defn compress-smart [data]
+  (if (<= (count data) 15)
+    [0 data]
+    (let [deflated (deflate data)]
+      (if (<= (count data) (count deflated))
+        [0 data]
+        [1 deflated]))))
 
 ;;;;;;;;;;;;;;;;;;;; Platform detection ;;;;;;;;;;;;;;
 
@@ -507,114 +487,3 @@
                                                (check-status status result))
                                              (finally
                                                (done))))))))))
-
-;;;;;;;;;;;;;;;;;;;; Websocket helpers ;;;;;;;;;;;;;;;;;;;;
-
-(def max-num-fragments 2147483647)  ;; 2^31-1
-(def default-websocket-options
-  {:on-connect (fn [ws]
-                 (debugf "Websocket connected to %s" (:peer-addr ws)))
-   :on-disconnect (fn [ws reason]
-                    (debugf "Websocket to %s disconnected. Reason: %s"
-                            (:peer-addr ws) reason))
-   :on-rcv (fn [ws data]
-             (debugf "Got %s bytes from %s" (count data) (:peer-addr ws)))
-   :on-error (fn [ws error]
-               (errorf "Error on websocket to %s: %s"
-                       (:peer-addr ws) error))
-   :compression-type :smart
-   :keep-alive-secs 30})
-
-(defn send-control-code [ws code]
-  (send-raw ws (byte-array [(bit-shift-left code 3)]))
-  nil)
-
-(defn send-ping [ws]
-  (send-control-code ws 16))
-
-(defn send-pong [ws]
-  (send-control-code ws 17))
-
-(s/defn set-num-frags! :- (s/maybe ByteArray)
-  [*num-fragments-in-msg :- s/Num
-   data :- ByteArray]
-  (let [num-frags (bit-and (aget #^bytes data 0) 0x07)
-        rest-of-bytes (slice-byte-array data 1)
-        [num-frags extra-data] (if (pos? num-frags)
-                                 [num-frags rest-of-bytes]
-                                 (read-zig-zag-encoded-int rest-of-bytes))]
-    (reset! *num-fragments-in-msg num-frags)
-    extra-data))
-
-(defn make-handle-rcv
-  [on-rcv rcv-chan *peer-fragment-size *ws]
-  (let [*num-fragments-rcvd (atom 0)
-        *num-fragments-in-msg (atom 0)
-        *fragment-buffer (atom [])
-        *decompress (atom nil)]
-    (s/fn [data :- ByteArray]
-      (if-not @*peer-fragment-size
-        (async/put! rcv-chan data)
-        (if (zero? @*num-fragments-in-msg)
-          (let [masked (bit-and (aget #^bytes data 0) 0xf8)
-                code (bit-shift-right masked 3)
-                extra-data (case code
-                             0 (do (reset! *decompress identity)
-                                   (set-num-frags! *num-fragments-in-msg data))
-                             1 (do (reset! *decompress inflate)
-                                   (set-num-frags! *num-fragments-in-msg data))
-                             16 (do (debugf "Got ping from peer.")
-                                    (send-pong @*ws))
-                             17 (do (debugf "Got pong from peer.")
-                                    nil))]
-            (when extra-data
-              (recur extra-data)))
-          (do
-            (swap! *fragment-buffer conj data)
-            (swap! *num-fragments-rcvd inc)
-            (when (= @*num-fragments-rcvd @*num-fragments-in-msg)
-              (let [msg (@*decompress (concat-byte-arrays @*fragment-buffer))]
-                (reset! *num-fragments-rcvd 0)
-                (reset! *num-fragments-in-msg 0)
-                (reset! *fragment-buffer [])
-                (on-rcv @*ws msg)))))))))
-
-(defn compress-smart [data]
-  (if (<= (count data) 15)
-    [0 data]
-    (let [deflated (deflate data)]
-      (if (<= (count data) (count deflated))
-        [0 data]
-        [1 deflated]))))
-
-(defn make-sender [ws-sender on-error compression-type *peer-fragment-size *ws
-                   proc-type]
-  (let [compress (case compression-type
-                   nil #(vector 0 %)
-                   :none #(vector 0 %)
-                   :smart compress-smart
-                   :deflate #(vector 1 (deflate %)))]
-    (fn [data]
-      (try
-        (let [[compression-id compressed] (compress data)
-              frags (byte-array->fragments compressed
-                                           ;; leave room for header
-                                           (- @*peer-fragment-size 6))
-              num-frags (count frags)
-              _ (when (> num-frags max-num-fragments)
-                  (throw (ex-info "Maximum message fragments exceeded."
-                                  {:type :illegal-argument
-                                   :subtype :too-many-fragments
-                                   :num-fragments num-frags
-                                   :max-num-framents max-num-fragments})))
-              first-byte (bit-shift-left compression-id 3)
-              header (if (<= num-frags 7)
-                       (byte-array [(bit-or first-byte num-frags)])
-                       (concat-byte-arrays
-                        [(byte-array [first-byte])
-                         (int->zig-zag-encoded-byte-array num-frags)]))
-              frags (update frags 0 #(concat-byte-arrays [header %]))]
-          (doseq [frag frags]
-            (ws-sender frag)))
-        (catch #?(:clj Exception :cljs :default) e
-            (on-error @*ws (get-exception-msg-and-stacktrace e)))))))

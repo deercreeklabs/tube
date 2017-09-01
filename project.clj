@@ -5,9 +5,10 @@
             :url "http://www.apache.org/licenses/LICENSE-2.0"}
   :lein-release {:scm :git
                  :deploy-via :clojars}
+
+  :main deercreeklabs.tube.server
+  :global-vars {*warn-on-reflection* true}
   :pedantic? :abort
-  :source-paths ["src/clj"]
-  :java-source-paths ["src/java"]
 
   :profiles
   {:dev
@@ -22,28 +23,19 @@
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
   :dependencies
-  [[bidi "2.1.2"]
-   [cljsjs/nodejs-externs "1.0.4-1"]
+  [[cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
    [clj-time "0.14.0"]
    [com.andrewmcveigh/cljs-time "0.5.1"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
    [com.fzakaria/slf4j-timbre "0.3.7"]
-   [http-kit "2.2.0"]
-   [javax.websocket/javax.websocket-api "1.1"]
-   [org.apache.avro/avro "1.8.2"]
    [org.clojure/clojure "1.8.0"]
    [org.clojure/clojurescript "1.9.908"]
    [org.clojure/core.async "0.3.443"]
-   [org.eclipse.jetty.websocket/websocket-server "9.4.7.RC0"]
-   [prismatic/schema "1.1.6"]
    [org.java-websocket/Java-WebSocket "1.3.4"]
+   [prismatic/schema "1.1.6"]
    [stylefruits/gniazdo "1.0.1"]]
-
-  :global-vars {*warn-on-reflection* true}
-
-  :main deercreeklabs.tube.server
 
   :cljsbuild
   {:builds
@@ -67,7 +59,18 @@
       :static-fns true
       :output-to  "target/test/node_test_adv/test_main.js"
       :output-dir "target/test/node_test_adv"
-      :source-map "target/test/node_test_adv/map.js.map"}}]}
+      :source-map "target/test/node_test_adv/map.js.map"}}
+    {:id "node-test-simple"
+     :source-paths ["src" "test"]
+     :notify-command ["node" "target/test/node_test_simple/test_main.js"]
+     :compiler
+     {:optimizations :simple
+      :main "deercreeklabs.test-runner"
+      :target :nodejs
+      :static-fns true
+      :output-to  "target/test/node_test_simple/test_main.js"
+      :output-dir "target/test/node_test_simple"
+      :source-map "target/test/node_test_simple/map.js.map"}}]}
 
   :aliases
   {"auto-test-cljs" ["do"
@@ -75,4 +78,7 @@
                      "cljsbuild" "auto" "node-test-none"]
    "auto-test-cljs-adv" ["do"
                          "clean,"
-                         "cljsbuild" "auto" "node-test-adv"]})
+                         "cljsbuild" "auto" "node-test-adv"]
+   "auto-test-cljs-simple" ["do"
+                            "clean,"
+                            "cljsbuild" "auto" "node-test-simple"]})

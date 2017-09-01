@@ -130,10 +130,12 @@ void TubeConnection::handleOnRcv(const std::string& message) {
         case 16: {
             std::cout << "Got ping." << std::endl;
             sendPong();
+            // TODO: Handle extra data
             break;
         }
         case 17: {
             std::cout << "Got pong." << std::endl;
+            // TODO: Handle extra data
             break;
         }
         }
