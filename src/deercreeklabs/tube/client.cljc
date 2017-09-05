@@ -81,6 +81,7 @@
                         (on-error (u/get-exception-msg-and-stacktrace e))))]
         (u/sym-map sender closer fragment-size)))))
 
+;; TODO: Replace .property access with cljs-oops or goog.object.*
 #?(:cljs
    (defn <make-ws-client-node
      [uri connected-ch on-error *handle-rcv *close-client]
@@ -114,14 +115,32 @@
         (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
+   (defn <make-ws-client-browser
+     [uri connected-ch on-error *handle-rcv *close-client]
+     (u/go-sf
+      (let [fragment-size 32000
+            client (js/WebSocket. uri)
+            msg-handler (fn [msg-obj]
+                          (let [data (-> (goog.object.get msg-obj "binaryData")
+                                         (js/Int8Array.))]
+                            (@*handle-rcv data)))
+            closer #(.close client)
+            sender (fn [data]
+                     (.send client (.buffer data)))]
+        (set! (.-binaryType client) "arraybuffer")
+        (set! (.-onopen client) (fn [event]
+                                  (ca/put! connected-ch true)))
+        (set! (.-onclose client) (fn [event]
+                                   (@*close-client (.-code event)
+                                    (.-reason event))))
+        (set! (.-onerror client) on-error)
+        (set! (.-onmessage client) msg-handler)
+        (u/sym-map sender closer fragment-size)))))
+
+#?(:cljs
    (defn <make-ws-client-jsc-ios
      [uri connected-ch on-error *handle-rcv *close-client]
      ;; TODO: Implement
-     ))
-
-#?(:cljs
-   (defn <make-ws-client-browser
-     [uri connected-ch on-error *handle-rcv *close-client]
      ))
 
 (defn <make-ws-client [& args]

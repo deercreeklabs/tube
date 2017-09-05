@@ -1,4 +1,4 @@
-(ns deercreeklabs.test-runner
+(ns deercreeklabs.node-test-runner
   (:require
    [cljs.nodejs :as nodejs]
    [cljs.test :as test :refer-macros [run-tests]]

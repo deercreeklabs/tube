@@ -16,11 +16,19 @@
     [[lein-ancient "0.6.10"]
      [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
      [lein-cloverage "1.0.9" :exclusions [org.clojure/clojure]]
+     ;;[lein-doo "0.1.7"]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
-     [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]}
+     [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]
+    ;; :dependencies
+    ;; [[doo "0.1.7"]]
+    }
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
+
+  :plugins
+  [[lein-doo "0.1.7" :exclusions [org.clojure/clojure
+                                  org.clojure/clojurescript]]]
 
   :dependencies
   [[cljsjs/nodejs-externs "1.0.4-1"]
@@ -45,7 +53,8 @@
      :notify-command ["node" "target/test/node_test_none/test_main.js"]
      :compiler
      {:optimizations :none
-      :main "deercreeklabs.test-runner"
+      :parallel-build true
+      :main "deercreeklabs.node-test-runner"
       :target :nodejs
       :output-to "target/test/node_test_none/test_main.js"
       :output-dir "target/test/node_test_none"
@@ -55,7 +64,8 @@
      :notify-command ["node" "target/test/node_test_adv/test_main.js"]
      :compiler
      {:optimizations :advanced
-      :main "deercreeklabs.test-runner"
+      :parallel-build true
+      :main "deercreeklabs.node-test-runner"
       :target :nodejs
       :static-fns true
       :output-to  "target/test/node_test_adv/test_main.js"
@@ -66,12 +76,40 @@
      :notify-command ["node" "target/test/node_test_simple/test_main.js"]
      :compiler
      {:optimizations :simple
-      :main "deercreeklabs.test-runner"
+      :parallel-build true
+      :main "deercreeklabs.node-test-runner"
       :target :nodejs
       :static-fns true
       :output-to  "target/test/node_test_simple/test_main.js"
       :output-dir "target/test/node_test_simple"
-      :source-map "target/test/node_test_simple/map.js.map"}}]}
+      :source-map "target/test/node_test_simple/map.js.map"}}
+    {:id "browser-test-none"
+     :source-paths ["src" "test"]
+     :compiler
+     {:optimizations :none
+      :parallel-build true
+      :main "deercreeklabs.doo-test-runner"
+      :output-to "target/test/browser_test_none/test_main.js"
+      :output-dir "target/test/browser_test_none"
+      :source-map true}}
+    {:id "browser-test-simple"
+     :source-paths ["src" "test"]
+     :compiler
+     {:optimizations :simple
+      :parallel-build true
+      :main "deercreeklabs.doo-test-runner"
+      :output-to "target/test/browser_test_simple/test_main.js"
+      :output-dir "target/test/browser_test_simple"
+      :source-map "target/test/browser_test_simple/map.js.map"}}
+    {:id "build-simple"
+     :source-paths ["src"]
+     :compiler
+     {:optimizations :simple
+      :parallel-build true
+      :static-fns true
+      :output-to  "target/build_simple/tube.js"
+      :output-dir "target/build_simple"
+      :source-map "target/build_simple/map.js.map"}}]}
 
   :aliases
   {"auto-test-cljs" ["do"
@@ -82,4 +120,7 @@
                          "cljsbuild" "auto" "node-test-adv"]
    "auto-test-cljs-simple" ["do"
                             "clean,"
-                            "cljsbuild" "auto" "node-test-simple"]})
+                            "cljsbuild" "auto" "node-test-simple"]
+   "build-simple" ["do"
+                   "clean,"
+                   "cljsbuild" "once" "build-simple"]})

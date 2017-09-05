@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [send])
   (:require
    [deercreeklabs.tube.utils :as u]
-   [primitive-math]
+   #?(:clj [primitive-math])
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   #?(:clj
      (:import
