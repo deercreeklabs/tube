@@ -16,19 +16,18 @@
     [[lein-ancient "0.6.10"]
      [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
      [lein-cloverage "1.0.9" :exclusions [org.clojure/clojure]]
-     ;;[lein-doo "0.1.7"]
+     [lein-doo "0.1.7"]
+     [lein-npm "0.6.2"]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
      [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]
-    ;; :dependencies
-    ;; [[doo "0.1.7"]]
-    }
+    :dependencies
+    [[doo "0.1.7"]]}
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
-  :plugins
-  [[lein-doo "0.1.7" :exclusions [org.clojure/clojure
-                                  org.clojure/clojurescript]]]
+  :npm {:dependencies [[source-map-support "0.4.17"]
+                       [websocket "1.0.24"]]}
 
   :dependencies
   [[cljsjs/nodejs-externs "1.0.4-1"]
