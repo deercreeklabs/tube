@@ -122,4 +122,7 @@
                             "cljsbuild" "auto" "node-test-simple"]
    "build-simple" ["do"
                    "clean,"
-                   "cljsbuild" "once" "build-simple"]})
+                   "cljsbuild" "once" "build-simple"]
+   "chrome-test" ["do"
+                  "clean,"
+                  "doo" "chrome" "browser-test-simple"]})
