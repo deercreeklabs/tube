@@ -53,8 +53,6 @@
            rsp (u/<? (<send-ws-msg-and-return-rsp msg 1000000))]
        (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp)))))))
 
-;; TODO: re-enable this
-
 (deftest test-round-trip-w-large-msg
   (u/test-async
    #?(:clj 15000
