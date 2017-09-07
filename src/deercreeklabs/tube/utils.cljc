@@ -395,7 +395,7 @@
     :output-fn short-log-output-fn
     :appenders
     {:println {:ns-blacklist
-               ["io.netty.*" "io.atomix.*" "org.eclipse.jetty.*"]}}}))
+               ["org.eclipse.jetty.*"]}}}))
 
 ;;;;;;;;;;;;;;;;;;;; core.async utils ;;;;;;;;;;;;;;;;;;;;
 
@@ -405,7 +405,11 @@
     ret))
 
 (defmacro <? [ch-expr]
-  `(check-ret (ca/<! ~ch-expr)))
+  `(check-ret (clojure.core.async/<! ~ch-expr)))
+
+(defmacro alts? [chs-expr]
+  `(let [[v# ch#] (clojure.core.async/alts! ~chs-expr)]
+     [(check-ret v#) ch#]))
 
 ;;;;;;;;;;;;;;;;;;;; Async test helpers ;;;;;;;;;;;;;;;;;;;;
 
