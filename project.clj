@@ -26,8 +26,12 @@
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
-  :npm {:dependencies [[source-map-support "0.4.17"]
-                       [websocket "1.0.24"]]}
+  :npm {:dependencies [[websocket "1.0.24"]]
+        :devDependencies [[karma "1.7.1"]
+                          [karma-chrome-launcher "2.2.0"]
+                          [karma-cljs-test "0.1.0"]
+                          [karma-firefox-launcher "1.0.1"]
+                          [source-map-support "0.4.17"]]}
 
   :dependencies
   [[cljsjs/nodejs-externs "1.0.4-1"]
@@ -63,6 +67,10 @@
      :notify-command ["node" "target/test/node_test_adv/test_main.js"]
      :compiler
      {:optimizations :advanced
+      ;; :pseudo-names true
+      ;; :pretty-print true
+      ;; :infer-externs true
+      :externs ["externs.js"]
       :parallel-build true
       :main "deercreeklabs.node-test-runner"
       :target :nodejs
@@ -82,24 +90,38 @@
       :output-to  "target/test/node_test_simple/test_main.js"
       :output-dir "target/test/node_test_simple"
       :source-map "target/test/node_test_simple/map.js.map"}}
-    {:id "browser-test-none"
+    {:id "doo-test-none"
      :source-paths ["src" "test"]
      :compiler
      {:optimizations :none
       :parallel-build true
       :main "deercreeklabs.doo-test-runner"
-      :output-to "target/test/browser_test_none/test_main.js"
-      :output-dir "target/test/browser_test_none"
+      :output-to "target/test/doo_test_none/test_main.js"
+      :output-dir "target/test/doo_test_none"
       :source-map true}}
-    {:id "browser-test-simple"
+    {:id "doo-test-simple"
      :source-paths ["src" "test"]
      :compiler
      {:optimizations :simple
       :parallel-build true
       :main "deercreeklabs.doo-test-runner"
-      :output-to "target/test/browser_test_simple/test_main.js"
-      :output-dir "target/test/browser_test_simple"
-      :source-map "target/test/browser_test_simple/map.js.map"}}
+      :output-to "target/test/doo_test_simple/test_main.js"
+      :output-dir "target/test/doo_test_simple"
+      :source-map "target/test/doo_test_simple/map.js.map"}}
+    {:id "doo-test-adv"
+     :source-paths ["src" "test"]
+     :compiler
+     {:optimizations :advanced
+      ;; :pseudo-names true
+      ;; :pretty-print true
+      ;; :infer-externs true
+      :externs ["externs.js"]
+      :parallel-build true
+      :main "deercreeklabs.doo-test-runner"
+      :static-fns true
+      :output-to  "target/test/doo_test_adv/test_main.js"
+      :output-dir "target/test/doo_test_adv"
+      :source-map "target/test/doo_test_adv/map.js.map"}}
     {:id "build-simple"
      :source-paths ["src"]
      :compiler
@@ -125,4 +147,4 @@
                    "cljsbuild" "once" "build-simple"]
    "chrome-test" ["do"
                   "clean,"
-                  "doo" "chrome" "browser-test-simple"]})
+                  "doo" "chrome" "doo-test-adv"]})

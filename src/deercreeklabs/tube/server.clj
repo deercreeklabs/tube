@@ -46,13 +46,15 @@
         close-conn (fn [^WebSocket ws code reason]
                      (let [conn-id (ws->conn-id ws)
                            conn (@*conn-id->conn conn-id)]
-                       (connection/close conn)
+                       (when conn
+                         (connection/close conn))
                        (swap! *conn-id->conn dissoc conn-id)
                        (on-disconnect conn-id code reason)))]
     (proxy [WebSocketServer] [iaddr]
       (onOpen [^WebSocket ws ^ClientHandshake handshake]
         (let [conn-id (ws->conn-id ws)
-              sender (fn [data] (.send ^WebSocket ws #^bytes data))
+              sender (fn [data]
+                       (.send ^WebSocket ws #^bytes data))
               closer (fn [] (.close ^WebSocket ws))
               conn (connection/make-connection
                     conn-id sender closer fragment-size compression-type false)
@@ -67,8 +69,9 @@
         (close-conn ws 1011 (u/get-exception-msg e)))
       (onMessage [^WebSocket ws ^HeapByteBuffer message]
         (let [conn-id (ws->conn-id ws)
-              conn (@*conn-id->conn conn-id)]
-          (connection/handle-data conn (.array message))))
+              conn (@*conn-id->conn conn-id)
+              bs (.array message)]
+          (connection/handle-data conn bs)))
       (onStart []
         (infof "TubeServer starting on port %s" port)))))
 

@@ -8,6 +8,9 @@
      (:import
       (java.io ByteArrayOutputStream))))
 
+#?(:cljs
+   (set! *warn-on-infer* true))
+
 #?(:clj
    (primitive-math/use-primitive-operators))
 
@@ -46,6 +49,11 @@
     @*state)
 
   (send [this data]
+    (when (not (#{:ready :msg-in-flight} @*state))
+      (throw (ex-info "Attempt to send before negotiation is complete."
+                      {:type :execution-error
+                       :subtype :send-before-negotiation-complete
+                       :state @*state})))
     (let [[compression-id compressed] (compress data)
           frags (u/byte-array->fragments compressed
                                          ;; leave room for header
@@ -107,7 +115,7 @@
              (when (> (count data) 1)
                (handle-data this (u/slice-byte-array data 1))))
         17 (when (> (count data) 1) ;; Got pong
-             (handle-data this (u/slice-byte-array data 1))) )))
+             (handle-data this (u/slice-byte-array data 1))))))
 
   (handle-ready-end* [this data compressed?]
     (reset! *cur-msg-compressed? compressed?)

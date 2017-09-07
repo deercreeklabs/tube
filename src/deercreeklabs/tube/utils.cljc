@@ -5,37 +5,25 @@
    #?(:cljs [cljsjs.pako])
    [#?(:clj clj-time.format :cljs cljs-time.format) :as f]
    [#?(:clj clj-time.core :cljs cljs-time.core) :as t]
-   [#?(:clj clojure.core.async :cljs cljs.core.async) :as async
-    :refer [#?@(:clj [go])]]
+   [clojure.core.async :as ca]
    [#?(:clj clojure.core.async.impl.protocols
        :cljs cljs.core.async.impl.protocols) :as cap]
-   #?(:clj [clojure.test :as test :refer [is]] :cljs [cljs.test :as test])
+   [#?(:clj clojure.test :cljs cljs.test) :as test :include-macros true]
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
-  #?(:cljs
-     (:require-macros
-      [cljs.core.async.macros :refer [go]]
-      [cljs.test :refer [is]]))
   #?(:clj
      (:import
       (com.google.common.primitives Bytes)
       (java.io ByteArrayInputStream ByteArrayOutputStream)
       (java.util Arrays)
-      (java.util.zip DeflaterOutputStream InflaterOutputStream))))
+      (java.util.zip DeflaterOutputStream InflaterOutputStream))
+     :cljs
+     (:require-macros
+      [cljs.core.async.macros :as ca]
+      deercreeklabs.tube.utils)))
 
-;;;;;;;;;;;;;;;;;;;; Macro-writing utils ;;;;;;;;;;;;;;;;;;;;
-
-;; From: http://blog.nberger.com.ar/blog/2015/09/18/more-portable-complex-macro-musing/
-(defn- cljs-env?
-  "Take the &env from a macro, and return whether we are expanding into cljs."
-  [env]
-  (boolean (:ns env)))
-
-(defmacro if-cljs
-  "Return `then` if we are generating cljs code and `else` for Clojure code.
-  https://groups.google.com/d/msg/clojurescript/iBY5HaQda4A/w1lAQi9_AwsJ"
-  [then else]
-  (if (cljs-env? &env) then else))
+#?(:cljs
+   (set! *warn-on-infer* true))
 
 ;;;;;;;;;;;;;;;;;;;; Macros ;;;;;;;;;;;;;;;;;;;;
 
@@ -157,6 +145,11 @@
          (.-length this)
          0))))
 
+(s/defn byte-array->debug-str :- s/Str
+  [ba :- ByteArray]
+  #?(:clj (str "[" (clojure.string/join "," (map str ba)) "]")
+     :cljs (str ba)))
+
 (s/defn slice-byte-array :- ByteArray
   "Return a slice of the given byte array.
    Args:
@@ -167,7 +160,7 @@
              the byte at the end index position, i.e.: the slice fn uses
              a half-open interval."
   ([array :- ByteArray]
-   (slice-byte-array array 0))
+   (slice-byte-array array 0 (count array)))
   ([array :- ByteArray
     start :- s/Num]
    (slice-byte-array array start (count array)))
@@ -185,11 +178,6 @@
         (Arrays/copyOfRange ^bytes array ^int start ^int stop)
         :cljs
         (.slice array start stop)))))
-
-(s/defn byte-array->debug-str :- s/Str
-  [ba :- ByteArray]
-  #?(:clj (str "[" (clojure.string/join "," (map str ba)) "]")
-     :cljs (str ba)))
 
 (s/defn reverse-byte-array :- ByteArray
   "Returns a new byte array with bytes reversed."
@@ -235,7 +223,7 @@
                  (conj output fragment)))))))
 
 (s/defn decode-int :- [(s/one s/Int :int)
-                                     (s/optional ByteArray :unread-remainder)]
+                       (s/optional ByteArray :unread-remainder)]
   "Takes an zig-zag encoded byte array and reads an integer from it.
    Returns a vector of the integer and, optionally, any unread bytes."
   [ba :- ByteArray]
@@ -250,7 +238,8 @@
                            (- 0)
                            (bit-xor (unsigned-bit-shift-right zz-n 1)))]
           (if (< (inc n) (count ba))
-            [int-out (slice-byte-array ba (inc n))]
+            (do
+              [int-out (slice-byte-array ba (inc n))])
             [int-out]))
         (let [out (-> (bit-and b 0x7f)
                       (bit-shift-left i)
@@ -410,80 +399,39 @@
 
 ;;;;;;;;;;;;;;;;;;;; core.async utils ;;;;;;;;;;;;;;;;;;;;
 
-(defmacro go-sf-helper [ex-type body]
-  `(try
-     [:success (do ~@body)]
-     (catch ~ex-type e#
-       [:failure e#])))
+(defn check-ret [ret]
+  (if (instance? #?(:cljs js/Error :clj Throwable) ret)
+    (throw ret)
+    ret))
 
-(defmacro go-sf [& body]
-  `(if-cljs
-    (cljs.core.async.macros/go
-      (go-sf-helper :default ~body))
-    (clojure.core.async/go
-      (go-sf-helper Exception ~body))))
-
-(defn call-sf-helper [status ret f]
-  (if (= :success status)
-    ret
-    (if (instance? #?(:cljs js/Error
-                      :clj Throwable) ret)
-      (throw ret)
-      (throw (ex-info "call-sf! call failed"
-                      {:type :execution-error
-                       :subtype :async-call-failed
-                       :f f
-                       :reason ret})))))
-
-(defmacro call-sf! [f & args]
-  `(if-cljs
-    (let [[status# ret#] (cljs.core.async/<! (~f ~@args))]
-      (call-sf-helper status# ret# ~f))
-    (let [[status# ret#] (clojure.core.async/<! (~f ~@args))]
-      (call-sf-helper status# ret# ~f))))
-
-#?(:clj
-   (defmacro call-sf!! [f & args]
-     `(let [[status# ret#] (clojure.core.async/<!! (~f ~@args))]
-        (call-sf-helper status# ret# ~f))))
+(defmacro <? [ch-expr]
+  `(check-ret (ca/<! ~ch-expr)))
 
 ;;;;;;;;;;;;;;;;;;;; Async test helpers ;;;;;;;;;;;;;;;;;;;;
 
-(defn- check-status [status ret]
-  (when (not= :success status)
-    (if (instance? #?(:cljs js/Error
-                      :clj Throwable) ret)
-      (throw ret)
-      (throw (ex-info (str "Async test failed with an error: " ret)
-                      {:type :test-failure
-                       :subtype :error-in-async-test
-                       :status status
-                       :ret ret})))))
-
 (s/defn test-async* :- s/Any
   [timeout-ms :- s/Num
-   go-sf-ch :- Channel]
-  (go
-    (let [t (async/timeout timeout-ms)
-          [ret ch] (async/alts! [go-sf-ch t])]
-      (if (= t ch)
-        [:failure :async-test-timeout]
-        ret))))
+   test-ch :- Channel]
+  (ca/go
+    (let [[ret ch] (ca/alts! [test-ch (ca/timeout timeout-ms)])]
+      (if (= test-ch ch)
+        ret
+        (throw (ex-info (str "Async test did not complete within "
+                             timeout-ms " ms.")
+                        {:type :test-failure
+                         :subtype :async-test-timeout
+                         :timeout-ms timeout-ms}))))))
 
 (s/defn test-async :- s/Any
-  ([go-sf-ch :- Channel]
-   (test-async 1000 go-sf-ch))
+  ([test-ch :- Channel]
+   (test-async 1000 test-ch))
   ([timeout-ms :- s/Num
-    go-sf-ch :- Channel]
-   (let [ch (test-async* timeout-ms go-sf-ch)]
-     #?(:clj
-        (let [[status ret] (async/<!! ch)]
-          (check-status status ret))
-        :cljs
-        (cljs.test/async done
-                         (async/take! ch (fn [ret]
-                                           (try
-                                             (let [[status result] ret]
-                                               (check-status status result))
-                                             (finally
-                                               (done))))))))))
+    test-ch :- Channel]
+   (let [ch (test-async* timeout-ms test-ch)]
+     #?(:clj (check-ret (ca/<!! ch))
+        :cljs (cljs.test/async
+               done (ca/take! ch (fn [ret]
+                                   (try
+                                     (check-ret ret)
+                                     (finally
+                                       (done))))))))))
