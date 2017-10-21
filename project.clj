@@ -8,21 +8,21 @@
 
   :main deercreeklabs.tube.server
   :global-vars {*warn-on-reflection* true}
-  :pedantic? :abort
+  ;;:pedantic? :abort
 
   :profiles
   {:dev
    {:plugins
-    [[lein-ancient "0.6.10"]
+    [[lein-ancient "0.6.14"]
      [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
      [lein-cloverage "1.0.9" :exclusions [org.clojure/clojure]]
-     [lein-doo "0.1.7"]
-     [lein-npm "0.6.2"]
+     [lein-doo "0.1.8"]
+     [lein-npm "0.6.2" :exclusions [com.fasterxml.jackson.core/jackson-core]]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
      [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]
     :dependencies
-    [[doo "0.1.7"]]}
+    [[doo "0.1.8"]]}
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
@@ -41,11 +41,14 @@
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
    [com.fzakaria/slf4j-timbre "0.3.7"]
+   [deercreeklabs/async-utils "0.1.3"]
+   [deercreeklabs/baracus "0.1.0"]
+   [deercreeklabs/log-utils "0.1.1"]
    [org.clojure/clojure "1.8.0"]
-   [org.clojure/clojurescript "1.9.908"]
+   [org.clojure/clojurescript "1.9.946"]
    [org.clojure/core.async "0.3.443"]
-   [org.java-websocket/Java-WebSocket "1.3.4"]
-   [prismatic/schema "1.1.6"]
+   [org.java-websocket/Java-WebSocket "1.3.5"]
+   [prismatic/schema "1.1.7"]
    [primitive-math "0.1.6"]
    [stylefruits/gniazdo "1.0.1"]]
 

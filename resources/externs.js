@@ -31,3 +31,5 @@ module.exports;
 RegExp.prototype.schema$core$Schema$;
 RegExp.prototype.schema$core$Schema$spec$arity$1;
 RegExp.prototype.schema$core$Schema$explain$arity$1;
+var ByteBufferPrototype;
+ByteBufferPrototype.readBitSet;

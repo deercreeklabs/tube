@@ -1,6 +1,7 @@
 (ns deercreeklabs.tube.connection
   (:refer-clojure :exclude [send])
   (:require
+   [deercreeklabs.baracus :as ba]
    [deercreeklabs.tube.utils :as u]
    #?(:clj [primitive-math])
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
@@ -16,7 +17,7 @@
 
 (def max-num-fragments 2147483647) ;; 2^31-1
 (defn make-control-code [x]
-  (u/byte-array [(bit-shift-left x 3)]))
+  (ba/byte-array [(bit-shift-left x 3)]))
 (def ping-control-code (make-control-code 16))
 (def pong-control-code (make-control-code 17))
 
@@ -55,7 +56,7 @@
                        :subtype :send-before-negotiation-complete
                        :state @*state})))
     (let [[compression-id compressed] (compress data)
-          frags (u/byte-array->fragments compressed
+          frags (ba/byte-array->fragments compressed
                                          ;; leave room for header
                                          (- (int @*peer-fragment-size) 6))
           num-frags (count frags)
@@ -67,11 +68,11 @@
                                :max-num-framents max-num-fragments})))
           first-byte (bit-shift-left compression-id 3)
           header (if (<= num-frags 7)
-                   (u/byte-array [(bit-or first-byte num-frags)])
-                   (u/concat-byte-arrays
-                    [(u/byte-array [first-byte])
-                     (u/encode-int num-frags)]))
-          frags (update frags 0 #(u/concat-byte-arrays [header %]))]
+                   (ba/byte-array [(bit-or first-byte num-frags)])
+                   (ba/concat-byte-arrays
+                    [(ba/byte-array [first-byte])
+                     (ba/encode-int num-frags)]))
+          frags (update frags 0 #(ba/concat-byte-arrays [header %]))]
       (doseq [frag frags]
         (sender frag))))
 
@@ -82,6 +83,7 @@
     (sender pong-control-code))
 
   (close [this]
+    (reset! *state :shutdown)
     (closer))
 
   (handle-data [this data]
@@ -91,18 +93,18 @@
       :msg-in-flight (handle-msg-in-flight* this data)))
 
   (handle-connected* [this data]
-    (let [[peer-fragment-size extra-data] (u/decode-int data)]
+    (let [[peer-fragment-size extra-data] (ba/decode-int data)]
       (reset! *peer-fragment-size peer-fragment-size)
       (when-not client?
-        (sender (u/encode-int fragment-size)))
+        (sender (ba/encode-int fragment-size)))
       (reset! *state :ready)
       (when extra-data
         (throw (ex-info "Extra data in negotiation header."
                         {:type :execution-error
                          :subtype :extra-data-in-negotiation-header
-                         :data-str (u/byte-array->debug-str data)
+                         :data-str (ba/byte-array->debug-str data)
                          :extra-data-str
-                         (u/byte-array->debug-str extra-data)})))))
+                         (ba/byte-array->debug-str extra-data)})))))
 
   (handle-ready* [this data]
     (let [masked (bit-and (aget #^bytes data 0) 0xf8)
@@ -113,17 +115,17 @@
         16 (do ;; Got ping
              (send-pong this)
              (when (> (count data) 1)
-               (handle-data this (u/slice-byte-array data 1))))
+               (handle-data this (ba/slice-byte-array data 1))))
         17 (when (> (count data) 1) ;; Got pong
-             (handle-data this (u/slice-byte-array data 1))))))
+             (handle-data this (ba/slice-byte-array data 1))))))
 
   (handle-ready-end* [this data compressed?]
     (reset! *cur-msg-compressed? compressed?)
     (let [num-frags (bit-and (aget #^bytes data 0) 0x07)
-          rest-of-bytes (u/slice-byte-array data 1)
+          rest-of-bytes (ba/slice-byte-array data 1)
           [num-frags extra-data] (if (pos? num-frags)
                                    [num-frags rest-of-bytes]
-                                   (u/decode-int rest-of-bytes))]
+                                   (ba/decode-int rest-of-bytes))]
       (reset! *num-fragments-expected num-frags)
       (reset! *state :msg-in-flight)
       (when extra-data
@@ -138,9 +140,9 @@
       (reset! *state :ready)
       (reset! *num-fragments-rcvd 0)
       (let [whole #?(:clj (.toByteArray ^ByteArrayOutputStream output-stream)
-                     :cljs (u/concat-byte-arrays @output-stream))
+                     :cljs (ba/concat-byte-arrays @output-stream))
             msg (if @*cur-msg-compressed?
-                  (u/inflate whole)
+                  (ba/inflate whole)
                   whole)]
         #?(:clj (.reset ^ByteArrayOutputStream output-stream)
            :cljs (reset! output-stream []))
@@ -157,7 +159,7 @@
                     nil #(vector 0 %)
                     :none #(vector 0 %)
                     :smart u/compress-smart
-                    :deflate #(vector 1 (u/deflate %)))
+                    :deflate #(vector 1 (ba/deflate %)))
          output-stream #?(:clj (ByteArrayOutputStream.)
                           :cljs (atom []))
          *state (atom :connected)

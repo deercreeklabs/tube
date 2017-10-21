@@ -2,6 +2,9 @@
   (:refer-clojure :exclude [send])
   (:require
    [clojure.core.async :as ca]
+   [deercreeklabs.async-utils :as au]
+   [deercreeklabs.baracus :as ba]
+   [deercreeklabs.log-utils :as lu]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
    #?(:clj [gniazdo.core :as ws])
@@ -11,7 +14,7 @@
     #?(:clj :refer :cljs :refer-macros) [debugf errorf infof]])
   #?(:clj
      (:import
-      (java.net URI))
+      (java.net ConnectException URI))
      :cljs
      (:require-macros
       [cljs.core.async.macros :as ca])))
@@ -25,7 +28,7 @@
 (def default-keepalive-secs 25)
 
 (defn start-keep-alive-loop [conn keep-alive-secs *shutdown]
-  (ca/go
+  (au/go
     (while (not @*shutdown)
       (ca/<! (ca/timeout (* 1000 (int keep-alive-secs))))
       ;; check again in case shutdown happened while we were waiting
@@ -48,31 +51,36 @@
    (defn <make-ws-client-clj
      [uri connected-ch on-error *handle-rcv *close-client]
      (ca/go
-       (let [fragment-size 31999
-             on-bin (fn [bs offset length]
-                      (let [data (u/slice-byte-array
-                                  bs offset (+ (int offset) (int length)))]
-                        (@*handle-rcv data)))
-             socket (ws/connect
-                     uri
-                     :on-close (fn [code reason]
-                                 (@*close-client code reason))
-                     :on-error on-error
-                     :on-binary on-bin)
-             _ (ca/put! connected-ch true) ;; ws/connect returns when connected
-             closer #(ws/close socket)
-             sender (fn [data]
-                      (try
-                        ;; Send-msg mutates binary data, so we make a copy
-                        (ws/send-msg socket (u/slice-byte-array data))
-                        (catch Exception e
-                          (on-error (u/get-exception-msg-and-stacktrace e)))))]
-         (u/sym-map sender closer fragment-size)))))
+       (try
+         (let [fragment-size 31999
+               on-bin (fn [bs offset length]
+                        (let [data (ba/slice-byte-array
+                                    bs offset (+ (int offset) (int length)))]
+                          (@*handle-rcv data)))
+               socket (ws/connect
+                       uri
+                       :on-close (fn [code reason]
+                                   (@*close-client code reason))
+                       :on-error on-error
+                       :on-binary on-bin
+                       :on-connect (fn [session]
+                                     (ca/put! connected-ch true)))
+               closer #(ws/close socket)
+               sender (fn [data]
+                        (try
+                          ;; Send-msg mutates binary data, so we make a copy
+                          (ws/send-msg socket (ba/slice-byte-array data))
+                          (catch Exception e
+                            (on-error
+                             (lu/get-exception-msg-and-stacktrace e)))))]
+           (u/sym-map sender closer fragment-size))
+         (catch ConnectException e ;; Ignore connection exceptions
+           nil)))))
 
 #?(:cljs
    (defn <make-ws-client-node
      [uri connected-ch on-error *handle-rcv *close-client]
-     (ca/go
+     (au/go
        (let [fragment-size 32000
              WSC (goog.object.get (js/require "websocket") "client")
              ^js/WebSocketClient client (WSC.)
@@ -96,7 +104,7 @@
                             (ca/put! connected-ch true))
              failure-handler  (fn [err]
                                 (let [reason [:connect-failure
-                                              (u/get-exception-msg err)]]
+                                              (lu/get-exception-msg err)]]
                                   (on-error reason)))]
          (.on client "connectFailed" failure-handler)
          (.on client "connect" conn-handler)
@@ -106,7 +114,7 @@
 #?(:cljs
    (defn <make-ws-client-browser
      [uri connected-ch on-error *handle-rcv *close-client]
-     (ca/go
+     (au/go
        (let [fragment-size 32000
              client (js/WebSocket. uri)
              msg-handler (fn [msg-obj]
@@ -139,8 +147,9 @@
                            :browser <make-ws-client-browser))]
     (apply factory args)))
 
-(defn <make-tube-client [uri options]
-  (ca/go
+(defn <make-tube-client [uri connect-timeout-ms options]
+  "Will return a connected client or a closed channel (nil) on timeout"
+  (au/go
     (let [{:keys [compression-type keep-alive-secs on-disconnect on-rcv]
            :or {compression-type :smart
                 keep-alive-secs default-keepalive-secs
@@ -153,7 +162,7 @@
           on-error (fn [msg]
                      (errorf "Error in websocket: %s" msg)
                      (@*close-client 1011 msg))
-          wsc (u/<? (<make-ws-client uri connected-ch on-error *handle-rcv
+          wsc (au/<? (<make-ws-client uri connected-ch on-error *handle-rcv
                                      *close-client))
           {:keys [sender closer fragment-size]} wsc
           close-client (fn [code reason]
@@ -162,13 +171,20 @@
                            (closer))
                          (on-disconnect code reason))
           conn (connection/make-connection uri sender closer nil
-                                           compression-type true on-rcv)]
-      (reset! *handle-rcv #(connection/handle-data conn %))
-      (reset! *close-client close-client)
-      (ca/<! connected-ch)
-      (sender (u/encode-int fragment-size))
-      ;; Wait for the protocol negotiation to happen
-      (while (= :connected (connection/get-state conn))
-        (ca/<! (ca/timeout 100)))
-      (start-keep-alive-loop conn keep-alive-secs *shutdown)
-      (->TubeClient conn))))
+                                           compression-type true on-rcv)
+          _ (reset! *handle-rcv #(connection/handle-data conn %))
+          _ (reset! *close-client close-client)
+          [connected? ch] (ca/alts! [connected-ch
+                                     (ca/timeout connect-timeout-ms)])]
+      (when (= connected-ch ch)
+        (sender (ba/encode-int fragment-size))
+        (loop []
+          (if-not @*shutdown
+            (if (= :connected (connection/get-state conn))
+              (do
+                ;; Wait for the protocol negotiation to happen
+                (ca/<! (ca/timeout 100))
+                (recur))
+              (do
+                (start-keep-alive-loop conn keep-alive-secs *shutdown)
+                (->TubeClient conn)))))))))

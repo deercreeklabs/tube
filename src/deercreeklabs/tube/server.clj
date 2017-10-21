@@ -3,6 +3,8 @@
   (:require
    [clojure.core.async :as async]
    [clojure.java.io :as io]
+   [deercreeklabs.baracus :as ba]
+   [deercreeklabs.log-utils :as lu]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
    [schema.core :as s]
@@ -65,8 +67,8 @@
         (close-conn ws code reason))
       (onError [^WebSocket ws ^Exception e]
         (errorf "Error on websocket.\n%s"
-                (u/get-exception-msg-and-stacktrace e))
-        (close-conn ws 1011 (u/get-exception-msg e)))
+                (lu/get-exception-msg-and-stacktrace e))
+        (close-conn ws 1011 (lu/get-exception-msg e)))
       (onMessage [^WebSocket ws ^HeapByteBuffer message]
         (let [conn-id (ws->conn-id ws)
               conn (@*conn-id->conn conn-id)
@@ -104,7 +106,7 @@
                       (debugf "Got conn from %s on %s" conn-id path)
                       (let [on-rcv (fn [conn data]
                                      (connection/send
-                                      conn (u/reverse-byte-array data)))]
+                                      conn (ba/reverse-byte-array data)))]
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn-id code reason]
                          (debugf "Conn to %s disconnected (Code: %s Reason: %s)"

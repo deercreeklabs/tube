@@ -5,7 +5,7 @@ A websocket client and server library.
 ![Image of pneumatic tube](doc/tube.jpg)
 
 Features:
-  - Client libraries for Clojure, ClojureScript, and C++
+  - Client libraries for Clojure and ClojureScript
   - Server library for Clojure
   - Compression
   - Message fragmentation

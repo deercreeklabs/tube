@@ -2,7 +2,10 @@
   (:require
    [clojure.core.async :as ca]
    [clojure.test :refer [deftest is use-fixtures]]
+   [deercreeklabs.async-utils :as au]
+   [deercreeklabs.baracus :as ba]
    [deercreeklabs.bytes :as tbs]
+   [deercreeklabs.log-utils :as lu]
    [deercreeklabs.tube.client :as tube-client]
    [deercreeklabs.tube.utils :as u]
    [schema.core :as s :include-macros true]
@@ -30,7 +33,7 @@
           client-rcv-ch (ca/chan)
           options {:on-rcv (fn [conn data]
                              (ca/put! client-rcv-ch data))}
-          client (u/<? (tube-client/<make-tube-client uri options))
+          client (au/<? (tube-client/<make-tube-client uri 1000 options))
           _ (tube-client/send client msg)
           [ret ch] (ca/alts! [client-rcv-ch (ca/timeout timeout)])]
       (tube-client/close client)
@@ -42,31 +45,31 @@
                          :timeout timeout}))))))
 
 (defn get-lots-of-bytes []
-  #?(:clj (u/read-byte-array-from-file "lots_o_bytes.bin")
-     :cljs (u/concat-byte-arrays (take 10 (repeat tbs/test-bytes)))))
+  #?(:clj (ba/read-byte-array-from-file "lots_o_bytes.bin")
+     :cljs (ba/concat-byte-arrays (take 10 (repeat tbs/test-bytes)))))
 
 (deftest test-round-trip-w-small-msg
-  (u/test-async
+  (au/test-async
    5000
    (ca/go
-     (let [msg (u/byte-array [72,101,108,108,111,32,119,111,114,108,100,33])
-           rsp (u/<? (<send-ws-msg-and-return-rsp msg 1000000))]
-       (is (u/equivalent-byte-arrays? msg (u/reverse-byte-array rsp)))))))
+     (let [msg (ba/byte-array [72,101,108,108,111,32,119,111,114,108,100,33])
+           rsp (au/<? (<send-ws-msg-and-return-rsp msg 1000000))]
+       (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))))))
 
 (deftest test-round-trip-w-large-msg
-  (u/test-async
+  (au/test-async
    #?(:clj 15000
       :cljs 60000)
    (ca/go
      (let [msg (get-lots-of-bytes)
-           rsp (u/<? (<send-ws-msg-and-return-rsp msg 60000))
-           rev (u/reverse-byte-array rsp)
-           m100 (u/slice-byte-array msg 0 100)
-           r100 (u/slice-byte-array rev 0 100)
+           rsp (au/<? (<send-ws-msg-and-return-rsp msg 60000))
+           rev (ba/reverse-byte-array rsp)
+           m100 (ba/slice-byte-array msg 0 100)
+           r100 (ba/slice-byte-array rev 0 100)
            msg-size (count msg)
            rsp-size (count rsp)]
        (is (= msg-size rsp-size))
-       (is (u/equivalent-byte-arrays? m100 r100))))))
+       (is (ba/equivalent-byte-arrays? m100 r100))))))
 
 (deftest test-encode-decode
   (let [data [[0 [0]]
@@ -77,9 +80,9 @@
               [1000 [-48 15]]
               [10000 [-96 -100 1]]]]
     (doseq [[num expected-bs] data]
-      (let [expected-ba (u/byte-array expected-bs)
-            ba (u/encode-int num)
-            [decoded rest] (u/decode-int ba)]
-        (is (u/equivalent-byte-arrays? expected-ba ba))
+      (let [expected-ba (ba/byte-array expected-bs)
+            ba (ba/encode-int num)
+            [decoded rest] (ba/decode-int ba)]
+        (is (ba/equivalent-byte-arrays? expected-ba ba))
         (is (= num decoded))
         (is (nil? rest))))))
