@@ -57,8 +57,8 @@
                        :state @*state})))
     (let [[compression-id compressed] (compress data)
           frags (ba/byte-array->fragments compressed
-                                         ;; leave room for header
-                                         (- (int @*peer-fragment-size) 6))
+                                          ;; leave room for header
+                                          (- (int @*peer-fragment-size) 6))
           num-frags (count frags)
           _ (when (> num-frags (int max-num-fragments))
               (throw (ex-info "Maximum message fragments exceeded."

@@ -8,7 +8,7 @@
 
   :main deercreeklabs.tube.server
   :global-vars {*warn-on-reflection* true}
-  ;;:pedantic? :abort
+  :pedantic? :abort
 
   :profiles
   {:dev
