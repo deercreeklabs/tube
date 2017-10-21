@@ -163,7 +163,7 @@
                      (errorf "Error in websocket: %s" msg)
                      (@*close-client 1011 msg))
           wsc (au/<? (<make-ws-client uri connected-ch on-error *handle-rcv
-                                     *close-client))
+                                      *close-client))
           {:keys [sender closer fragment-size]} wsc
           close-client (fn [code reason]
                          (reset! *shutdown true)
