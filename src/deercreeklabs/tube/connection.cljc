@@ -22,13 +22,14 @@
 (def pong-control-code (make-control-code 17))
 
 (defprotocol IConnection
-  (set-on-rcv [this on-rcv] "Set the receive handler for this connection")
+  (set-on-rcv [this on-rcv] "Set the receive handler")
+  (set-on-close [this on-close] "Set the close handler")
   (get-conn-id [this] "Return the connection id")
   (get-state [this] "Return the state for this connection")
   (send [this data] "Send binary bytes over this connection")
   (send-ping [this] "Send a tube-specific ping (not an RFC6455 ping)")
   (send-pong [this] "Send a tube-specific pong (not an RFC6455 pong)")
-  (close [this] "Close this connection")
+  (close [this] [this code reason] "Close this connection")
   (handle-data [this data] "The network layer calls this on receipt of data")
   (handle-connected* [this data] "Internal use only")
   (handle-ready* [this data] "Internal use only")
@@ -37,11 +38,14 @@
 
 (deftype Connection
     [conn-id sender closer fragment-size compress client? output-stream
-     *on-rcv *state *peer-fragment-size *num-fragments-expected
+     *on-rcv *on-close *state *peer-fragment-size *num-fragments-expected
      *num-fragments-rcvd *cur-msg-compressed?]
   IConnection
   (set-on-rcv [this on-rcv]
     (reset! *on-rcv on-rcv))
+
+  (set-on-close [this on-close]
+    (reset! *on-close on-close))
 
   (get-conn-id [this]
     conn-id)
@@ -83,7 +87,12 @@
     (sender pong-control-code))
 
   (close [this]
+    (close this 1000 "Explicit close"))
+
+  (close [this code reason]
     (reset! *state :shutdown)
+    (when-let [on-close @*on-close]
+      (on-close this code reason))
     (closer))
 
   (handle-data [this data]
@@ -162,12 +171,13 @@
                     :deflate #(vector 1 (ba/deflate %)))
          output-stream #?(:clj (ByteArrayOutputStream.)
                           :cljs (atom []))
+         *on-close (atom nil)
          *state (atom :connected)
          *peer-fragment-size (atom nil)
          *num-fragments-expected (atom nil)
          *num-fragments-rcvd (atom 0)
          *cur-msg-compressed? (atom false)]
      (->Connection conn-id sender closer fragment-size compress client?
-                   output-stream *on-rcv *state *peer-fragment-size
+                   output-stream *on-rcv *on-close *state *peer-fragment-size
                    *num-fragments-expected *num-fragments-rcvd
                    *cur-msg-compressed?))))

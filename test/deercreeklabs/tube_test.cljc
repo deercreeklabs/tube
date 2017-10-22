@@ -52,7 +52,7 @@
   (au/test-async
    5000
    (ca/go
-     (let [msg (ba/byte-array [72,101,108,108,111,32,119,111,114,108,100,33])
+     (let [msg (ba/byte-array [72 101 108 108 111 32 119 111 114 108 100 33])
            rsp (au/<? (<send-ws-msg-and-return-rsp msg 1000000))]
        (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))))))
 

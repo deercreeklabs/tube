@@ -49,7 +49,7 @@
                      (let [conn-id (ws->conn-id ws)
                            conn (@*conn-id->conn conn-id)]
                        (when conn
-                         (connection/close conn))
+                         (connection/close conn code reason))
                        (swap! *conn-id->conn dissoc conn-id)
                        (on-disconnect conn-id code reason)))]
     (proxy [WebSocketServer] [iaddr]
