@@ -37,9 +37,9 @@
   (handle-msg-in-flight* [this data] "Internal use only"))
 
 (deftype Connection
-    [conn-id sender closer fragment-size compress client? output-stream
-     *on-rcv *on-close *state *peer-fragment-size *num-fragments-expected
-     *num-fragments-rcvd *cur-msg-compressed?]
+    [conn-id on-connect path sender closer fragment-size compress client?
+     output-stream *on-rcv *on-close *state *peer-fragment-size
+     *num-fragments-expected *num-fragments-rcvd *cur-msg-compressed?]
   IConnection
   (set-on-rcv [this on-rcv]
     (reset! *on-rcv on-rcv))
@@ -113,7 +113,8 @@
                          :subtype :extra-data-in-negotiation-header
                          :data-str (ba/byte-array->debug-str data)
                          :extra-data-str
-                         (ba/byte-array->debug-str extra-data)})))))
+                         (ba/byte-array->debug-str extra-data)})))
+      (on-connect this conn-id path)))
 
   (handle-ready* [this data]
     (let [masked (bit-and (aget #^bytes data 0) 0xf8)
@@ -158,10 +159,12 @@
         (@*on-rcv this msg)))))
 
 (defn make-connection
-  ([conn-id sender closer fragment-size compression-type client?]
-   (make-connection conn-id sender closer fragment-size compression-type
-                    client? nil))
-  ([conn-id sender closer fragment-size compression-type client? on-rcv]
+  ([conn-id on-connect path sender closer fragment-size compression-type
+    client?]
+   (make-connection conn-id on-connect path sender closer fragment-size
+                    compression-type client? nil))
+  ([conn-id on-connect path sender closer fragment-size compression-type client?
+    on-rcv]
    (let [on-rcv (or on-rcv (constantly nil))
          *on-rcv (atom on-rcv)
          compress (case compression-type
@@ -177,7 +180,7 @@
          *num-fragments-expected (atom nil)
          *num-fragments-rcvd (atom 0)
          *cur-msg-compressed? (atom false)]
-     (->Connection conn-id sender closer fragment-size compress client?
-                   output-stream *on-rcv *on-close *state *peer-fragment-size
-                   *num-fragments-expected *num-fragments-rcvd
-                   *cur-msg-compressed?))))
+     (->Connection conn-id on-connect path sender closer fragment-size compress
+                   client? output-stream *on-rcv *on-close *state
+                   *peer-fragment-size *num-fragments-expected
+                   *num-fragments-rcvd *cur-msg-compressed?))))

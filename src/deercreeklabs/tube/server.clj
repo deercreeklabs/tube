@@ -58,11 +58,11 @@
               sender (fn [data]
                        (.send ^WebSocket ws #^bytes data))
               closer (fn [] (.close ^WebSocket ws))
+              path (.getResourceDescriptor ws)
               conn (connection/make-connection
-                    conn-id sender closer fragment-size compression-type false)
-              path (.getResourceDescriptor ws)]
-          (swap! *conn-id->conn assoc conn-id conn)
-          (on-connect conn conn-id path)))
+                    conn-id on-connect path sender closer fragment-size
+                    compression-type false)]
+          (swap! *conn-id->conn assoc conn-id conn)))
       (onClose [^WebSocket ws code ^String reason remote?]
         (close-conn ws code reason))
       (onError [^WebSocket ws ^Exception e]

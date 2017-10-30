@@ -159,6 +159,7 @@
           *close-client (atom nil)
           *shutdown (atom false)
           connected-ch (ca/chan)
+          ready-ch (ca/chan)
           on-error (fn [msg]
                      (errorf "Error in websocket: %s" msg)
                      (@*close-client 1011 msg))
@@ -170,7 +171,11 @@
                          (when closer
                            (closer))
                          (on-disconnect code reason))
-          conn (connection/make-connection uri sender closer nil
+          path uri ;; TODO: parse to get actual path?
+          on-connect (fn [conn conn-id path]
+                       (debugf "Connection to %s is ready." conn-id)
+                       (ca/put! ready-ch true))
+          conn (connection/make-connection uri on-connect path sender closer nil
                                            compression-type true on-rcv)
           _ (reset! *handle-rcv #(connection/handle-data conn %))
           _ (reset! *close-client close-client)
@@ -179,12 +184,11 @@
       (when (= connected-ch ch)
         (sender (ba/encode-int fragment-size))
         (loop []
-          (if-not @*shutdown
-            (if (= :connected (connection/get-state conn))
-              (do
+          (when-not @*shutdown
+            (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
+              (if (= ready-ch ch)
+                (do
+                  (start-keep-alive-loop conn keep-alive-secs *shutdown)
+                  (->TubeClient conn))
                 ;; Wait for the protocol negotiation to happen
-                (ca/<! (ca/timeout 100))
-                (recur))
-              (do
-                (start-keep-alive-loop conn keep-alive-secs *shutdown)
-                (->TubeClient conn)))))))))
+                (recur)))))))))
