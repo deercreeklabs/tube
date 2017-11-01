@@ -41,7 +41,7 @@
    [com.fzakaria/slf4j-timbre "0.3.7"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
-   [deercreeklabs/async-utils "0.1.3"]
+   [deercreeklabs/async-utils "0.1.4"]
    [deercreeklabs/baracus "0.1.0"]
    [deercreeklabs/log-utils "0.1.1"]
    [org.clojure/clojure "1.8.0"]
