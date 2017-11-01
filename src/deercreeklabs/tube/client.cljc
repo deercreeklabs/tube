@@ -173,7 +173,6 @@
                          (on-disconnect code reason))
           path uri ;; TODO: parse to get actual path?
           on-connect (fn [conn conn-id path]
-                       (debugf "Connection to %s is ready." conn-id)
                        (ca/put! ready-ch true))
           conn (connection/make-connection uri on-connect path sender closer nil
                                            compression-type true on-rcv)

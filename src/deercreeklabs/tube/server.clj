@@ -103,14 +103,11 @@
    (let [keystore-path (System/getenv "TUBE_JKS_KEYSTORE_PATH")
          keystore-password (System/getenv "TUBE_JKS_KEYSTORE_PASSWORD")
          on-connect (fn [conn conn-id path]
-                      (debugf "Got conn from %s on %s" conn-id path)
                       (let [on-rcv (fn [conn data]
                                      (connection/send
                                       conn (ba/reverse-byte-array data)))]
                         (connection/set-on-rcv conn on-rcv)))
-         on-disconnect (fn [conn-id code reason]
-                         (debugf "Conn to %s disconnected (Code: %s Reason: %s)"
-                                 conn-id code reason))
+         on-disconnect (fn [conn-id code reason])
          compression-type :smart
          server (make-tube-server port keystore-path keystore-password
                                   on-connect on-disconnect compression-type)]
