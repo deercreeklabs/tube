@@ -1,4 +1,4 @@
-(defproject deercreeklabs/tube "0.1.6-SNAPSHOT"
+(defproject deercreeklabs/tube "0.1.6"
   :description "Clojure/Clojurescript websocket client and server library."
   :url "http://www.deercreeklabs.com"
   :license {:name "Apache License, Version 2.0"
