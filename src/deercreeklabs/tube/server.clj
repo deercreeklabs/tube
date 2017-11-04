@@ -4,7 +4,7 @@
    [clojure.core.async :as async]
    [clojure.java.io :as io]
    [deercreeklabs.baracus :as ba]
-   [deercreeklabs.log-utils :as lu]
+   [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
    [schema.core :as s]
@@ -34,7 +34,7 @@
     (.start ^WebSocketServer ws-server))
 
   (stop [this]
-    (.stop ^WebSocketServer ws-server))
+    (.stop ^WebSocketServer ws-server 0))
 
   (get-conn-count [this]
     (count @*conn-id->conn)))
