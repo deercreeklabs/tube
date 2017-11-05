@@ -47,7 +47,7 @@
   (fn handle [req]
     (try
       (http/with-channel req channel
-        (let [{:keys [path]} (:route-params req)
+        (let [{:keys [uri]} req
               ch-str (.toString ^AsyncChannel channel)
               [local remote-addr] (clojure.string/split ch-str #"<->")
               sender (fn [data]
@@ -56,12 +56,12 @@
                                  remote-addr)))
               closer #(http/close channel)
               conn (connection/make-connection
-                    remote-addr on-connect path sender closer fragment-size
+                    remote-addr on-connect uri sender closer fragment-size
                     compression-type false)
               on-rcv #(connection/handle-data conn %)]
           (http/on-close channel #(on-disconnect remote-addr "" %))
           (http/on-receive channel on-rcv)
-          (debugf "Got connection on %s from %s" (:uri req) remote-addr)))
+          (debugf "Got connection on %s from %s" uri remote-addr)))
       (catch Exception e
         (lu/log-exception e)))))
 
