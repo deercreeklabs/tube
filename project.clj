@@ -40,7 +40,7 @@
              :compiler compiler}
       node-test? (assoc :notify-command ["node" output-to]))))
 
-(defproject deercreeklabs/tube "0.1.8"
+(defproject deercreeklabs/tube "0.1.9-SNAPSHOT"
   :description "Clojure/Clojurescript websocket client and server library."
   :url "http://www.deercreeklabs.com"
   :license {:name "Apache License, Version 2.0"
