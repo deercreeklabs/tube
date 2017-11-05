@@ -69,7 +69,7 @@
   (let [*conn-id->conn (atom {})
         *stopper (atom nil)
         routes ["/" {[[#".*" :path]] (make-root-handler on-connect on-disconnect
-                                                compression-type)}]
+                                                        compression-type)}]
         handler (br/make-handler routes)
         starter #(http/run-server handler {:port port})]
     (->TubeServer *conn-id->conn starter *stopper)))

@@ -86,7 +86,6 @@
     (browser?) :browser
     :else :unknown))
 
-
 (defn configure-logging []
   (timbre/merge-config!
    {:level :debug
