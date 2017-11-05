@@ -29,7 +29,7 @@
 
 (defn <send-ws-msg-and-return-rsp [msg timeout]
   (ca/go
-    (let [uri (str "wss://chadlaptop.f1shoppingcart.com:" port)
+    (let [uri (str "ws://localhost:" port)
           client-rcv-ch (ca/chan)
           options {:on-rcv (fn [conn data]
                              (ca/put! client-rcv-ch data))}

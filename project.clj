@@ -49,12 +49,14 @@
                  :deploy-via :clojars}
 
   :main deercreeklabs.tube.server
-  :global-vars {*warn-on-reflection* true}
   :pedantic? :abort
 
   :profiles
   {:dev
-   {:plugins
+   {:global-vars {*warn-on-reflection* true}
+    :source-paths ["dev" "src"]
+    :repl-options {:init-ns user}
+    :plugins
     [[lein-ancient "0.6.14"]
      [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
      [lein-cloverage "1.0.10" :exclusions [org.clojure/clojure]]
@@ -64,7 +66,8 @@
      ;; lein-release, we exclude lein-release from lein-ancient.
      [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]
     :dependencies
-    [[doo "0.1.8"]]}
+    [[doo "0.1.8"]
+     [org.clojure/tools.namespace "0.2.11"]]}
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
 
@@ -75,7 +78,8 @@
                           [source-map-support "0.4.17"]]}
 
   :dependencies
-  [[cljsjs/nodejs-externs "1.0.4-1"]
+  [[bidi "2.1.2"]
+   [cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
    [clj-time "0.14.0"]
    [com.andrewmcveigh/cljs-time "0.5.1"]
@@ -85,10 +89,10 @@
    [deercreeklabs/async-utils "0.1.4"]
    [deercreeklabs/baracus "0.1.0"]
    [deercreeklabs/log-utils "0.1.1"]
+   [http-kit "2.3.0-alpha4"]
    [org.clojure/clojure "1.8.0"]
    [org.clojure/clojurescript "1.9.946"]
    [org.clojure/core.async "0.3.443"]
-   [org.java-websocket/Java-WebSocket "1.3.5"]
    [prismatic/schema "1.1.7"]
    [primitive-math "0.1.6"]
    [stylefruits/gniazdo "1.0.1"]]

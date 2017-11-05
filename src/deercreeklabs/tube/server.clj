@@ -1,23 +1,19 @@
 (ns deercreeklabs.tube.server
   (:gen-class)
   (:require
+   [bidi.ring :as br]
    [clojure.core.async :as async]
    [clojure.java.io :as io]
    [deercreeklabs.baracus :as ba]
    [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
+   [org.httpkit.server :as http]
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   (:import
-   (java.net InetSocketAddress)
    (java.nio HeapByteBuffer)
-   (java.security KeyStore)
-   (javax.net.ssl KeyManagerFactory SSLContext TrustManagerFactory)
-   (org.java_websocket WebSocket)
-   (org.java_websocket.handshake ClientHandshake)
-   (org.java_websocket.server DefaultSSLWebSocketServerFactory
-                              WebSocketServer)))
+   (org.httpkit.server AsyncChannel)))
 
 (primitive-math/use-primitive-operators)
 
@@ -28,89 +24,69 @@
   (stop [this] "Stop serving")
   (get-conn-count [this] "Return the number of current connections"))
 
-(deftype TubeServer [*conn-id->conn ws-server]
+(deftype TubeServer [*conn-id->conn starter *stopper]
   ITubeServer
   (start [this]
-    (.start ^WebSocketServer ws-server))
+    (if @*stopper
+      (infof "Server is already started.")
+      (do
+        (reset! *stopper (starter))
+        (infof "Started server."))))
 
   (stop [this]
-    (.stop ^WebSocketServer ws-server 0))
+    (if-let [stopper @*stopper]
+      (do
+        (stopper)
+        (reset! *stopper nil))
+      (infof "Server is not running.")))
 
   (get-conn-count [this]
     (count @*conn-id->conn)))
 
-(defn ws->conn-id [^WebSocket ws]
-  (.toString (.getRemoteSocketAddress ws)))
-
-(defn make-ws-server
-  [port on-connect on-disconnect compression-type *conn-id->conn]
-  (let [iaddr (InetSocketAddress. port)
-        close-conn (fn [^WebSocket ws code reason]
-                     (let [conn-id (ws->conn-id ws)
-                           conn (@*conn-id->conn conn-id)]
-                       (when conn
-                         (connection/close conn code reason))
-                       (swap! *conn-id->conn dissoc conn-id)
-                       (on-disconnect conn-id code reason)))]
-    (proxy [WebSocketServer] [iaddr]
-      (onOpen [^WebSocket ws ^ClientHandshake handshake]
-        (let [conn-id (ws->conn-id ws)
+(defn make-root-handler [on-connect on-disconnect compression-type]
+  (fn handle [req]
+    (try
+      (http/with-channel req channel
+        (let [{:keys [path]} (:route-params req)
+              ch-str (.toString ^AsyncChannel channel)
+              [local remote-addr] (clojure.string/split ch-str #"<->")
               sender (fn [data]
-                       (.send ^WebSocket ws #^bytes data))
-              closer (fn [] (.close ^WebSocket ws))
-              path (.getResourceDescriptor ws)
+                       (when-not (http/send! channel data)
+                         (errorf "Attempt to send to closed websocket (%s)"
+                                 remote-addr)))
+              closer #(http/close channel)
               conn (connection/make-connection
-                    conn-id on-connect path sender closer fragment-size
-                    compression-type false)]
-          (swap! *conn-id->conn assoc conn-id conn)))
-      (onClose [^WebSocket ws code ^String reason remote?]
-        (close-conn ws code reason))
-      (onError [^WebSocket ws ^Exception e]
-        (errorf "Error on websocket.\n%s"
-                (lu/get-exception-msg-and-stacktrace e))
-        (close-conn ws 1011 (lu/get-exception-msg e)))
-      (onMessage [^WebSocket ws ^HeapByteBuffer message]
-        (let [conn-id (ws->conn-id ws)
-              conn (@*conn-id->conn conn-id)
-              bs (.array message)]
-          (connection/handle-data conn bs)))
-      (onStart []
-        (infof "TubeServer starting on port %s" port)))))
+                    remote-addr on-connect path sender closer fragment-size
+                    compression-type false)
+              on-rcv #(connection/handle-data conn %)]
+          (http/on-close channel #(on-disconnect remote-addr "" %))
+          (http/on-receive channel on-rcv)
+          (debugf "Got connection on %s from %s" (:uri req) remote-addr)))
+      (catch Exception e
+        (lu/log-exception e)))))
 
-(defn make-tube-server
-  [port keystore-path keystore-password on-connect on-disconnect
-   compression-type]
+(defn make-tube-server [port on-connect on-disconnect compression-type]
   (let [*conn-id->conn (atom {})
-        ks (KeyStore/getInstance "JKS")
-        _ (.load ks (io/input-stream keystore-path),
-                 (.toCharArray ^String keystore-password))
-        kmf (KeyManagerFactory/getInstance "SunX509")
-        _ (.init kmf ks (.toCharArray ^String keystore-password))
-        tmf (TrustManagerFactory/getInstance "SunX509")
-        _ (.init tmf ks)
-        ssl-ctx (SSLContext/getInstance "TLS")
-        _ (.init ssl-ctx (.getKeyManagers kmf) (.getTrustManagers tmf) nil)
-        ws-server (make-ws-server port on-connect on-disconnect
-                                  compression-type *conn-id->conn)]
-    (.setWebSocketFactory ^WebSocketServer ws-server
-                          (DefaultSSLWebSocketServerFactory. ssl-ctx))
-    (->TubeServer *conn-id->conn ws-server)))
+        *stopper (atom nil)
+        routes ["/" {[[#".*" :path]] (make-root-handler on-connect on-disconnect
+                                                compression-type)}]
+        handler (br/make-handler routes)
+        starter #(http/run-server handler {:port port})]
+    (->TubeServer *conn-id->conn starter *stopper)))
 
 (defn run-reverser-server
   ([] (run-reverser-server 8080))
   ([port]
    (u/configure-logging)
-   (let [keystore-path (System/getenv "TUBE_JKS_KEYSTORE_PATH")
-         keystore-password (System/getenv "TUBE_JKS_KEYSTORE_PASSWORD")
-         on-connect (fn [conn conn-id path]
+   (let [on-connect (fn [conn conn-id path]
                       (let [on-rcv (fn [conn data]
                                      (connection/send
                                       conn (ba/reverse-byte-array data)))]
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn-id code reason])
          compression-type :smart
-         server (make-tube-server port keystore-path keystore-password
-                                  on-connect on-disconnect compression-type)]
+         server (make-tube-server port on-connect on-disconnect
+                                  compression-type)]
      (start server))))
 
 
