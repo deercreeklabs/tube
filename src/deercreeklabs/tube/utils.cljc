@@ -5,7 +5,6 @@
    #?(:cljs [cljsjs.pako])
    [#?(:clj clj-time.format :cljs cljs-time.format) :as f]
    [#?(:clj clj-time.core :cljs cljs-time.core) :as t]
-   [clojure.core.async :as ca]
    [#?(:clj clojure.core.async.impl.protocols
        :cljs cljs.core.async.impl.protocols) :as cap]
    [#?(:clj clojure.test :cljs cljs.test) :as test :include-macros true]
@@ -21,7 +20,6 @@
       (java.util.zip DeflaterOutputStream InflaterOutputStream))
      :cljs
      (:require-macros
-      [cljs.core.async.macros :as ca]
       deercreeklabs.tube.utils)))
 
 #?(:cljs

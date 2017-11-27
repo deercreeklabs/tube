@@ -6,9 +6,9 @@
    ;; :pseudo-names true
    ;; :pretty-print true
    ;; :infer-externs true
-   })
+   :externs ["tube_externs.js"]})
 
-(defn make-build-conf [id target-kw build-type-kw opt-level main externs]
+(defn make-build-conf [id target-kw build-type-kw opt-level main]
   (let [build-type-str (name build-type-kw)
         target-str (if target-kw
                      (name target-kw)
@@ -32,8 +32,7 @@
                                :output-dir output-dir
                                :source-map source-map)
                    main (assoc :main main)
-                   externs (assoc :externs externs)
-                   node? (assoc :target :nodejs))
+                       node? (assoc :target :nodejs))
         node-test? (and node? (= :test build-type-kw))]
     (cond-> {:id id
              :source-paths source-paths
@@ -81,18 +80,18 @@
   [[bidi "2.1.2"]
    [cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
-   [clj-time "0.14.0"]
-   [com.andrewmcveigh/cljs-time "0.5.1"]
+   [clj-time "0.14.2"]
+   [com.andrewmcveigh/cljs-time "0.5.2"]
    [com.fzakaria/slf4j-timbre "0.3.7"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
-   [deercreeklabs/async-utils "0.1.4"]
-   [deercreeklabs/baracus "0.1.0"]
-   [deercreeklabs/log-utils "0.1.1"]
+   [deercreeklabs/async-utils "0.1.6"]
+   [deercreeklabs/baracus "0.1.1"]
+   [deercreeklabs/log-utils "0.1.2"]
    [http-kit "2.3.0-alpha4"]
-   [org.clojure/clojure "1.8.0"]
+   [org.clojure/clojure "1.9.0-beta4"]
    [org.clojure/clojurescript "1.9.946"]
-   [org.clojure/core.async "0.3.443"]
+   [org.clojure/core.async "0.3.465"]
    [prismatic/schema "1.1.7"]
    [primitive-math "0.1.6"]
    [stylefruits/gniazdo "1.0.1"]]
@@ -100,19 +99,18 @@
   :cljsbuild
   {:builds
    [~(make-build-conf "node-test-none" :node :test :none
-                      "deercreeklabs.node-test-runner" nil)
+                      "deercreeklabs.node-test-runner")
     ~(make-build-conf "node-test-simple" :node :test :simple
-                      "deercreeklabs.node-test-runner" nil)
+                      "deercreeklabs.node-test-runner")
     ~(make-build-conf "node-test-adv" :node :test :advanced
-                      "deercreeklabs.node-test-runner" ["tube_externs.js"])
+                      "deercreeklabs.node-test-runner")
     ~(make-build-conf "doo-test-none" :doo :test :none
-                      "deercreeklabs.doo-test-runner" nil)
+                      "deercreeklabs.doo-test-runner")
     ~(make-build-conf "doo-test-simple" :doo :test :simple
-                      "deercreeklabs.doo-test-runner" nil)
+                      "deercreeklabs.doo-test-runner")
     ~(make-build-conf "doo-test-adv" :doo :test :advanced
-                      "deercreeklabs.doo-test-runner" ["tube_externs.js"])
-    ~(make-build-conf "build-adv" nil :build :advanced
-                      nil ["tube_externs.js"])]}
+                      "deercreeklabs.doo-test-runner")
+    ~(make-build-conf "build-adv" nil :build :advanced nil)]}
 
   :aliases
   {"auto-test-cljs" ["do"

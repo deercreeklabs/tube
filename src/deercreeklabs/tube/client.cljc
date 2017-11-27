@@ -14,10 +14,7 @@
     #?(:clj :refer :cljs :refer-macros) [debugf errorf infof]])
   #?(:clj
      (:import
-      (java.net ConnectException URI))
-     :cljs
-     (:require-macros
-      [cljs.core.async.macros :as ca])))
+      (java.net ConnectException URI))))
 
 #?(:cljs
    (set! *warn-on-infer* true))

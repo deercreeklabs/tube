@@ -10,10 +10,7 @@
    [deercreeklabs.tube.utils :as u]
    [schema.core :as s :include-macros true]
    [schema.test :as st]
-   [taoensso.timbre :as timbre :refer [debugf errorf infof]])
-  #?(:cljs
-     (:require-macros
-      [cljs.core.async.macros :as ca])))
+   [taoensso.timbre :as timbre :refer [debugf errorf infof]]))
 
 ;; Use this instead of fixtures, which are hard to make work w/ async testing.
 (s/set-fn-validation! false)
