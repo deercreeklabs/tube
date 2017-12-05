@@ -40,7 +40,7 @@
 ;;;;;;;;;;;;;;;;;;;; Utility fns ;;;;;;;;;;;;;;;;;;;;
 
 (defn compress-smart [data]
-  (if (<= (count data) 15)
+  (if (<= (count data) 30)
     [0 data]
     (let [deflated (ba/deflate data)]
       (if (<= (count data) (count deflated))

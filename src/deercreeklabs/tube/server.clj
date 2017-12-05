@@ -24,7 +24,7 @@
   (stop [this] "Stop serving")
   (get-conn-count [this] "Return the number of current connections"))
 
-(deftype TubeServer [*conn-id->conn starter *stopper]
+(deftype TubeServer [*conn-count starter *stopper]
   ITubeServer
   (start [this]
     (if @*stopper
@@ -41,9 +41,9 @@
       (infof "Server is not running.")))
 
   (get-conn-count [this]
-    (count @*conn-id->conn)))
+    @*conn-count))
 
-(defn make-root-handler [on-connect on-disconnect compression-type]
+(defn make-root-handler [on-connect on-disconnect compression-type *conn-count]
   (fn handle [req]
     (try
       (http/with-channel req channel
@@ -59,20 +59,30 @@
                     remote-addr on-connect uri sender closer fragment-size
                     compression-type false)
               on-rcv #(connection/handle-data conn %)]
-          (http/on-close channel #(on-disconnect remote-addr "" %))
           (http/on-receive channel on-rcv)
-          (debugf "Got connection on %s from %s" uri remote-addr)))
+          (http/on-close channel
+                         (fn [reason]
+                           (swap! *conn-count #(dec (int %)))
+                           (debugf (str "Closed conn from %s. Reason: %s. "
+                                        "Conn count: %s") remote-addr reason
+                                   @*conn-count)
+                           (on-disconnect remote-addr "" reason)))
+          (swap! *conn-count #(inc (int %)))
+          (debugf "Got connection on %s from %s. Conn count: %d"
+                  uri remote-addr @*conn-count)))
       (catch Exception e
+        (errorf "Unexpected exception in root handler.")
         (lu/log-exception e)))))
 
 (defn make-tube-server [port on-connect on-disconnect compression-type]
-  (let [*conn-id->conn (atom {})
+  (let [*conn-count (atom 0)
         *stopper (atom nil)
         routes ["/" {[[#".*" :path]] (make-root-handler on-connect on-disconnect
-                                                        compression-type)}]
+                                                        compression-type
+                                                        *conn-count)}]
         handler (br/make-handler routes)
         starter #(http/run-server handler {:port port})]
-    (->TubeServer *conn-id->conn starter *stopper)))
+    (->TubeServer *conn-count starter *stopper)))
 
 (defn run-reverser-server
   ([] (run-reverser-server 8080))

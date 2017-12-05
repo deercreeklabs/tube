@@ -48,7 +48,7 @@
                  :deploy-via :clojars}
 
   :main deercreeklabs.tube.server
-  :pedantic? :abort
+  ;;:pedantic? :abort
 
   :profiles
   {:dev
@@ -127,4 +127,4 @@
                 "cljsbuild" "once" "build-adv"]
    "chrome-test" ["do"
                   "clean,"
-                  "doo" "chrome" "doo-test-adv"]})
+                  "doo" "chrome" "doo-test-simple"]})
