@@ -29,12 +29,9 @@
     (let [uri (str "ws://localhost:" port)
           client-rcv-ch (ca/chan)
           options {:on-rcv (fn [conn data]
-                             (debugf "in on-rcv.")
                              (ca/put! client-rcv-ch data))}
           client (au/<? (tube-client/<make-tube-client uri 1000 options))
-          _ (debugf "Made client: %s" client)
           _ (tube-client/send client msg)
-          _ (debugf "Sent data")
           [ret ch] (ca/alts! [client-rcv-ch (ca/timeout timeout)])]
       (tube-client/close client)
       (if (= client-rcv-ch ch)
@@ -55,7 +52,7 @@
      (let [msg (ba/byte-array [72 101 108 108 111 32 119 111 114 108 100 33])
            rsp (au/<? (<send-ws-msg-and-return-rsp msg 25000))]
        (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))))))
-#_
+
 (deftest test-round-trip-w-large-msg
   (au/test-async
    #?(:clj 15000
@@ -70,7 +67,7 @@
            rsp-size (count rsp)]
        (is (= msg-size rsp-size))
        (is (ba/equivalent-byte-arrays? m100 r100))))))
-#_
+
 (deftest test-encode-decode
   (let [data [[0 [0]]
               [-1 [1]]

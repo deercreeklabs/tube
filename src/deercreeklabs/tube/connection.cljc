@@ -96,14 +96,13 @@
     (closer))
 
   (handle-data [this data]
-    (debugf "In handle-data.")
     (case @*state
       :connected (handle-connected* this data)
       :ready (handle-ready* this data)
-      :msg-in-flight (handle-msg-in-flight* this data)))
+      :msg-in-flight (handle-msg-in-flight* this data)
+      :shutdown nil))
 
   (handle-connected* [this data]
-    (debugf "In handle-connected*")
     (let [[peer-fragment-size extra-data] (ba/decode-int data)]
       (reset! *peer-fragment-size peer-fragment-size)
       (when-not client?
@@ -119,7 +118,6 @@
       (on-connect this conn-id path)))
 
   (handle-ready* [this data]
-    (debugf "In handle-ready*")
     (let [masked (bit-and (aget #^bytes data 0) 0xf8)
           code (bit-shift-right masked 3)]
       (case code
@@ -133,7 +131,6 @@
              (handle-data this (ba/slice-byte-array data 1))))))
 
   (handle-ready-end* [this data compressed?]
-    (debugf "In handle-ready-end*")
     (reset! *cur-msg-compressed? compressed?)
     (let [num-frags (bit-and (aget #^bytes data 0) 0x07)
           rest-of-bytes (ba/slice-byte-array data 1)
@@ -146,7 +143,6 @@
         (handle-data this extra-data))))
 
   (handle-msg-in-flight* [this data]
-    (debugf "In handle-msg-in-flight*")
     #?(:clj (.write ^ByteArrayOutputStream output-stream data 0 (count data))
        :cljs (swap! output-stream conj data))
     (swap! *num-fragments-rcvd #(inc (int %))) ;; anon fn for prim math

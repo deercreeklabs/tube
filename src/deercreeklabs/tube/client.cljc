@@ -116,7 +116,6 @@
              client (js/WebSocket. uri)
              msg-handler (fn [msg-obj]
                            (let [data (js/Int8Array. (.-data msg-obj))]
-                             (debugf "In msg-handler. data: %s" data)
                              (@*handle-rcv data)))
              closer #(.close client)
              sender (fn [data]
@@ -175,24 +174,17 @@
                                            compression-type true on-rcv)
           _ (reset! *handle-rcv #(connection/handle-data conn %))
           _ (reset! *close-client close-client)
-          _ (debugf "#1")
           [connected? ch] (ca/alts! [connected-ch
                                      (ca/timeout connect-timeout-ms)])]
-      (debugf "#2")
       (when (= connected-ch ch)
-        (debugf "#3")
         (sender (ba/encode-int fragment-size))
         (loop []
-          (debugf "#4")
           (when-not @*shutdown
-            (debugf "#5")
             (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
               (if (= ready-ch ch)
                 (do
-                  (debugf "#5a")
                   (start-keep-alive-loop conn keep-alive-secs *shutdown)
                   (->TubeClient conn))
                 ;; Wait for the protocol negotiation to happen
                 (do
-                  (debugf "#5b")
                   (recur))))))))))
