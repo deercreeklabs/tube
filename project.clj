@@ -127,4 +127,4 @@
                 "cljsbuild" "once" "build-adv"]
    "chrome-test" ["do"
                   "clean,"
-                  "doo" "chrome" "doo-test-simple"]})
+                  "doo" "chrome" "doo-test-adv"]})
