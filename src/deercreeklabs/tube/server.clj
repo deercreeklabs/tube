@@ -51,9 +51,7 @@
               ch-str (.toString ^AsyncChannel channel)
               [local remote-addr] (clojure.string/split ch-str #"<->")
               sender (fn [data]
-                       (when-not (http/send! channel data)
-                         (errorf "Attempt to send to closed websocket (%s)"
-                                 remote-addr)))
+                       (http/send! channel data))
               closer #(http/close channel)
               conn (connection/make-connection
                     remote-addr on-connect uri sender closer fragment-size
