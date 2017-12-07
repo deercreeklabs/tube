@@ -61,12 +61,12 @@
           (http/on-close channel
                          (fn [reason]
                            (swap! *conn-count #(dec (int %)))
-                           (debugf (str "Closed conn from %s. Reason: %s. "
-                                        "Conn count: %s") remote-addr reason
-                                   @*conn-count)
+                           (debugf (str "Closed conn on %s from %s. "
+                                        "Reason: %s.  Conn count: %s.")
+                                   uri remote-addr reason @*conn-count)
                            (on-disconnect remote-addr "" reason)))
           (swap! *conn-count #(inc (int %)))
-          (debugf "Got connection on %s from %s. Conn count: %d"
+          (debugf "Got conn on %s from %s. Conn count: %d"
                   uri remote-addr @*conn-count)))
       (catch Exception e
         (errorf "Unexpected exception in root handler.")

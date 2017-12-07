@@ -90,4 +90,4 @@
     :output-fn lu/short-log-output-fn
     :appenders
     {:println {:ns-blacklist
-               ["org.eclipse.jetty.*"]}}}))
+               ["io.netty.*"]}}}))

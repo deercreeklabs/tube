@@ -1,15 +1,16 @@
 (ns deercreeklabs.tube.client
   (:refer-clojure :exclude [send])
   (:require
+   #?(:clj [aleph.http :as aleph])
    [clojure.core.async :as ca]
    [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
-   [deercreeklabs.log-utils :as lu]
+   [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
-   #?(:clj [gniazdo.core :as ws])
+   #?(:clj [manifold.deferred :as d])
+   #?(:clj [manifold.stream :as s])
    #?(:cljs [goog.object])
-   [schema.core :as s :include-macros true]
    [taoensso.timbre :as timbre
     #?(:clj :refer :cljs :refer-macros) [debugf errorf infof]])
   #?(:clj
@@ -24,12 +25,12 @@
 
 (def default-keepalive-secs 25)
 
-(defn start-keep-alive-loop [conn keep-alive-secs *shutdown]
+(defn start-keep-alive-loop [conn keep-alive-secs *shutdown?]
   (au/go
-    (while (not @*shutdown)
+    (while (not @*shutdown?)
       (ca/<! (ca/timeout (* 1000 (int keep-alive-secs))))
       ;; check again in case shutdown happened while we were waiting
-      (when-not @*shutdown
+      (when-not @*shutdown?
         (connection/send-ping conn)))))
 
 (defprotocol ITubeClient
@@ -47,32 +48,31 @@
 #?(:clj
    (defn <make-ws-client-clj
      [uri connected-ch on-error *handle-rcv *close-client]
-     (ca/go
-       (try
-         (let [fragment-size 31999
-               on-bin (fn [bs offset length]
-                        (let [data (ba/slice-byte-array
-                                    bs offset (+ (int offset) (int length)))]
-                          (@*handle-rcv data)))
-               socket (ws/connect
-                       uri
-                       :on-close (fn [code reason]
-                                   (@*close-client code reason))
-                       :on-error on-error
-                       :on-binary on-bin
-                       :on-connect (fn [session]
-                                     (ca/put! connected-ch true)))
-               closer #(ws/close socket)
-               sender (fn [data]
-                        (try
-                          ;; Send-msg mutates binary data, so we make a copy
-                          (ws/send-msg socket (ba/slice-byte-array data))
-                          (catch Exception e
-                            (on-error
-                             (lu/get-exception-msg-and-stacktrace e)))))]
-           (u/sym-map sender closer fragment-size))
-         (catch ConnectException e ;; Ignore connection exceptions
-           nil)))))
+     (au/go
+       (let [fragment-size 65535
+             opts {:max-frame-payload fragment-size
+                   :max-frame-size fragment-size}
+             socket (aleph/websocket-client uri opts)
+             closer (fn []
+                      (s/close! @socket))
+             sender (fn [data]
+                      (let [ret (s/put! @socket data)]
+                        (d/on-realized
+                         ret
+                         (fn [x]
+                           (when-not x
+                             (on-error (str "Send to " uri " failed."))))
+                         (fn [x]
+                           (on-error (str "Send to " uri
+                                          " failed. Error: " x))))))]
+         (d/on-realized socket
+                        (fn [x]
+                          (ca/put! connected-ch true))
+                        (fn [x]
+                          (on-error x)))
+         (s/consume #(@*handle-rcv %) @socket)
+         (s/on-closed @socket #(@*close-client 1000 :stream-closed))
+         (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
    (defn <make-ws-client-node
@@ -154,7 +154,7 @@
                 on-rcv (constantly nil)}} options
           *handle-rcv (atom nil)
           *close-client (atom nil)
-          *shutdown (atom false)
+          *shutdown? (atom false)
           connected-ch (ca/chan)
           ready-ch (ca/chan)
           on-error (fn [msg]
@@ -164,7 +164,7 @@
                                       *close-client))
           {:keys [sender closer fragment-size]} wsc
           close-client (fn [code reason]
-                         (reset! *shutdown true)
+                         (reset! *shutdown? true)
                          (when closer
                            (closer))
                          (on-disconnect code reason))
@@ -179,11 +179,11 @@
       (when (= connected-ch ch)
         (sender (ba/encode-int fragment-size))
         (loop []
-          (when-not @*shutdown
+          (when-not @*shutdown?
             (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
               (if (= ready-ch ch)
                 (do
-                  (start-keep-alive-loop conn keep-alive-secs *shutdown)
+                  (start-keep-alive-loop conn keep-alive-secs *shutdown?)
                   (->TubeClient conn))
                 ;; Wait for the protocol negotiation to happen
                 (do

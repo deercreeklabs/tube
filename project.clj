@@ -77,7 +77,8 @@
                           [source-map-support "0.4.17"]]}
 
   :dependencies
-  [[bidi "2.1.2"]
+  [[aleph "0.4.4"]
+   [bidi "2.1.2"]
    [cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
    [clj-time "0.14.2"]
@@ -93,8 +94,7 @@
    [org.clojure/clojurescript "1.9.946"]
    [org.clojure/core.async "0.3.465"]
    [prismatic/schema "1.1.7"]
-   [primitive-math "0.1.6"]
-   [stylefruits/gniazdo "1.0.1"]]
+   [primitive-math "0.1.6"]]
 
   :cljsbuild
   {:builds
