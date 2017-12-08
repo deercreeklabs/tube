@@ -31,6 +31,7 @@
           options {:on-rcv (fn [conn data]
                              (ca/put! client-rcv-ch data))}
           client (au/<? (tube-client/<make-tube-client uri 1000 options))
+          _ (is (not= nil client))
           _ (tube-client/send client msg)
           [ret ch] (ca/alts! [client-rcv-ch (ca/timeout timeout)])]
       (tube-client/close client)

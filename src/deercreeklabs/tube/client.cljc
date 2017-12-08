@@ -75,7 +75,8 @@
                           (s/on-closed stream #(@*close-client
                                                 1000 :stream-closed))
                           (ca/put! connected-ch true))
-                        (fn [x]
+                        (fn [err]
+                          (debugf "Websocket failed to connect. Error: %s" err)
                           (ca/put! connected-ch false)))
          (u/sym-map sender closer fragment-size)))))
 
