@@ -191,7 +191,9 @@
       (when (and (= connected-ch ch)
                  connected?)
         (sender (ba/encode-int fragment-size))
-        (let [expiry-ms (+ (u/get-current-time-ms) connect-timeout-ms)]
+        (let [expiry-ms (+ (#?(:clj long :cljs identity) ;; ensure primitive
+                            (u/get-current-time-ms))
+                           (#?(:clj long :cljs identity) connect-timeout-ms))]
           (loop []
             (when-not @*shutdown?
               (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
@@ -201,7 +203,8 @@
                     (start-keep-alive-loop conn keep-alive-secs *shutdown?)
                     (->TubeClient conn))
 
-                  (> (u/get-current-time-ms) expiry-ms)
+                  (> (#?(:clj long :cljs identity) (u/get-current-time-ms))
+                     (#?(:clj long :cljs identity) expiry-ms))
                   nil
 
                   :else

@@ -13,7 +13,7 @@
    [taoensso.timbre :as timbre :refer [debugf errorf infof]]))
 
 ;; Use this instead of fixtures, which are hard to make work w/ async testing.
-(s/set-fn-validation! false)
+(s/set-fn-validation! true)
 
 (u/configure-logging)
 
