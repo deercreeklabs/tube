@@ -91,3 +91,8 @@
     :appenders
     {:println {:ns-blacklist
                ["io.netty.*"]}}}))
+
+(s/defn get-current-time-ms :- s/Num
+  []
+  #?(:clj (System/currentTimeMillis)
+     :cljs (.getTime (js/Date.))))

@@ -83,3 +83,11 @@
         (is (ba/equivalent-byte-arrays? expected-ba ba))
         (is (= num decoded))
         (is (nil? rest))))))
+
+(deftest test-bad-uri
+  (au/test-async
+   2000
+   (ca/go
+     (let [uri "ws://not-a-real-url.not-a-domain"
+           client (au/<? (tube-client/<make-tube-client uri 1000 {}))]
+       (is (= nil client))))))

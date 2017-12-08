@@ -48,7 +48,7 @@
                  :deploy-via :clojars}
 
   :main deercreeklabs.tube.server
-  :pedantic? :abort
+  ;;:pedantic? :abort
 
   :profiles
   {:dev
@@ -95,6 +95,10 @@
    [org.clojure/core.async "0.3.465"]
    [prismatic/schema "1.1.7"]
    [primitive-math "0.1.6"]]
+
+  :test-selectors {:default (constantly true)
+                   :the-one :the-one
+                   :all (constantly true)}
 
   :cljsbuild
   {:builds

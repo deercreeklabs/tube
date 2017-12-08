@@ -29,9 +29,7 @@
   (start [this]
     (if @*stopper
       (infof "Server is already started.")
-      (do
-        (reset! *stopper (starter))
-        (infof "Started server."))))
+      (reset! *stopper (starter))))
 
   (stop [this]
     (if-let [stopper @*stopper]
@@ -79,7 +77,9 @@
                                                         compression-type
                                                         *conn-count)}]
         handler (br/make-handler routes)
-        starter #(http/run-server handler {:port port})]
+        starter (fn []
+                  (http/run-server handler {:port port})
+                  (infof "Started server on port %s." port))]
     (->TubeServer *conn-count starter *stopper)))
 
 (defn run-reverser-server

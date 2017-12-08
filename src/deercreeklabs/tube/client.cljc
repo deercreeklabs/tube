@@ -54,7 +54,11 @@
                    :max-frame-size fragment-size}
              socket (aleph/websocket-client uri opts)
              closer (fn []
-                      (s/close! @socket))
+                      (try
+                        (s/close! @socket)
+                        (catch Exception e
+                          (errorf "Unexpected error in ws-client closer.")
+                          (lu/log-exception e))))
              sender (fn [data]
                       (let [ret (s/put! @socket data)]
                         (d/on-realized
@@ -66,12 +70,13 @@
                            (on-error (str "Send to " uri
                                           " failed. Error: " x))))))]
          (d/on-realized socket
-                        (fn [x]
+                        (fn [stream]
+                          (s/consume #(@*handle-rcv %) stream)
+                          (s/on-closed stream #(@*close-client
+                                                1000 :stream-closed))
                           (ca/put! connected-ch true))
                         (fn [x]
-                          (on-error x)))
-         (s/consume #(@*handle-rcv %) @socket)
-         (s/on-closed @socket #(@*close-client 1000 :stream-closed))
+                          (ca/put! connected-ch false)))
          (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
@@ -98,12 +103,8 @@
                             (.on conn "error" on-error)
                             (.on conn "message" msg-handler)
                             (reset! *conn conn)
-                            (ca/put! connected-ch true))
-             failure-handler  (fn [err]
-                                (let [reason [:connect-failure
-                                              (lu/get-exception-msg err)]]
-                                  (on-error reason)))]
-         (.on client "connectFailed" failure-handler)
+                            (ca/put! connected-ch true))]
+         (.on client "connectFailed" #(ca/put! connected-ch false))
          (.on client "connect" conn-handler)
          (.connect ^js/WebSocketClient client uri)
          (u/sym-map sender closer fragment-size)))))
@@ -114,6 +115,7 @@
      (au/go
        (let [fragment-size 32000
              client (js/WebSocket. uri)
+             *connected? (atom false)
              msg-handler (fn [msg-obj]
                            (let [data (js/Int8Array. (.-data msg-obj))]
                              (@*handle-rcv data)))
@@ -122,11 +124,15 @@
                       (.send client (.-buffer data)))]
          (set! (.-binaryType client) "arraybuffer")
          (set! (.-onopen client) (fn [event]
+                                   (reset! *connected? true)
                                    (ca/put! connected-ch true)))
          (set! (.-onclose client) (fn [event]
                                     (@*close-client (.-code event)
                                      (.-reason event))))
-         (set! (.-onerror client) on-error)
+         (set! (.-onerror client) (fn [err]
+                                    (if @*connected?
+                                      (on-error err)
+                                      (ca/put! connected-ch false))))
          (set! (.-onmessage client) msg-handler)
          (u/sym-map sender closer fragment-size)))))
 
@@ -145,7 +151,8 @@
     (apply factory args)))
 
 (defn <make-tube-client [uri connect-timeout-ms options]
-  "Will return a connected client or a closed channel (nil) on timeout"
+  "Will return a connected client or a closed channel (nil) on connection
+   failure or timeout."
   (au/go
     (let [{:keys [compression-type keep-alive-secs on-disconnect on-rcv]
            :or {compression-type :smart
@@ -158,8 +165,13 @@
           connected-ch (ca/chan)
           ready-ch (ca/chan)
           on-error (fn [msg]
-                     (errorf "Error in websocket: %s" msg)
-                     (@*close-client 1011 msg))
+                     (try
+                       (errorf "Error in websocket: %s" msg)
+                       (when-let [close-client @*close-client]
+                         (close-client 1011 msg))
+                       (catch #?(:clj Exception :cljs js/Error) e
+                         (errorf "Unexpected error in on-error.")
+                         (lu/log-exception e))))
           wsc (au/<? (<make-ws-client uri connected-ch on-error *handle-rcv
                                       *close-client))
           {:keys [sender closer fragment-size]} wsc
@@ -176,15 +188,22 @@
           _ (reset! *close-client close-client)
           [connected? ch] (ca/alts! [connected-ch
                                      (ca/timeout connect-timeout-ms)])]
-      (when (= connected-ch ch)
+      (when (and (= connected-ch ch)
+                 connected?)
         (sender (ba/encode-int fragment-size))
-        (loop []
-          (when-not @*shutdown?
-            (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
-              (if (= ready-ch ch)
-                (do
-                  (start-keep-alive-loop conn keep-alive-secs *shutdown?)
-                  (->TubeClient conn))
-                ;; Wait for the protocol negotiation to happen
-                (do
+        (let [expiry-ms (+ (u/get-current-time-ms) connect-timeout-ms)]
+          (loop []
+            (when-not @*shutdown?
+              (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
+                (cond
+                  (= ready-ch ch)
+                  (do
+                    (start-keep-alive-loop conn keep-alive-secs *shutdown?)
+                    (->TubeClient conn))
+
+                  (> (u/get-current-time-ms) expiry-ms)
+                  nil
+
+                  :else
+                  ;; Wait for the protocol negotiation to happen
                   (recur))))))))))
