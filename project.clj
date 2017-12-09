@@ -78,7 +78,6 @@
 
   :dependencies
   [[aleph "0.4.4"]
-   [bidi "2.1.2" :exclusions [ring/ring-core]]
    [cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
    [clj-time "0.14.2"]

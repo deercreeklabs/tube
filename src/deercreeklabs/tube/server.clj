@@ -1,9 +1,9 @@
 (ns deercreeklabs.tube.server
   (:gen-class)
   (:require
-   [bidi.ring :as br]
-   [clojure.core.async :as async]
+   [clojure.core.async :as ca]
    [clojure.java.io :as io]
+   [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
    [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
@@ -16,8 +16,6 @@
    (java.nio HeapByteBuffer)))
 
 (primitive-math/use-primitive-operators)
-
-(def fragment-size 32000)
 
 (defprotocol ITubeServer
   (start [this] "Start serving")
@@ -46,12 +44,14 @@
   (fn handle-ws [req]
     (try
       (let [{:keys [uri remote-addr]} req
-            fragment-size 15000
+            fragment-size 16000
             conn-id (swap! *conn-id #(inc (int %)))
             *channel (atom nil)
             sender (fn [data]
-                     (iwa/send! @*channel data))
-            closer #(iwa/close @*channel)
+                     (when-let [channel @*channel]
+                       (iwa/send! channel data)))
+            closer #(when-let [channel @*channel]
+                       (iwa/close channel))
             conn (connection/make-connection
                   conn-id on-connect uri sender closer fragment-size
                   compression-type false)
@@ -76,28 +76,54 @@
                          (connection/handle-data conn message))]
         (iwa/as-channel req (u/sym-map on-open on-close on-error on-message)))
       (catch Exception e
-        (errorf "Unexpected exception in root handler.")
+        (errorf "Unexpected exception in handle-ws")
         (lu/log-exception e)))))
+
+(defn make-http-handler [<handle-http http-timeout-ms]
+  (fn handle-http [req]
+    (let [on-open (fn [stream]
+                    (ca/go
+                      (try
+                        (let [ret-ch (<handle-http req)
+                              timeout-ch (ca/timeout http-timeout-ms)
+                              [ret ch] (au/alts? [ret-ch timeout-ch])
+                              ret (cond
+                                    (map? ret) ret
+                                    (string? ret) {:status 200 :body ret}
+                                    (= timeout-ch ch) {:status 504 :body ""}
+                                    :else {:status 500 :body "Bad response"})]
+                          (iwa/send! stream ret {:close? true}))
+                        (catch Exception e
+                          (errorf "Unexpected exception in http-handler.")
+                          (lu/log-exception e)))))]
+      (iwa/as-channel req (u/sym-map on-open)))))
 
 (defn make-tube-server
   ([port on-connect on-disconnect compression-type]
-   (make-tube-server port on-connect on-disconnect compression-type {}))
-  ([port on-connect on-disconnect compression-type opts]
-   (let [{:keys [http-path <handle-http]} opts
-         *conn-count (atom 0)
+   (make-tube-server port on-connect on-disconnect compression-type nil 0))
+  ([port on-connect on-disconnect compression-type <handle-http http-timeout-ms]
+   (let [*conn-count (atom 0)
          *stopper (atom nil)
          *conn-id (atom 0)
          ws-handler (make-ws-handler on-connect on-disconnect compression-type
                                      *conn-count *conn-id)
-         routes ["/" ws-handler]
-         handler (br/make-handler routes)
+         http-handler (make-http-handler <handle-http http-timeout-ms)
+         handler (fn [req]
+                   (if (:websocket? req)
+                     (ws-handler req)
+                     (http-handler req)))
          starter (fn []
                    (iw/run handler {:port port})
                    (infof "Started server on port %s." port))]
      (->TubeServer *conn-count starter *stopper))))
 
-(defn run-reverser-server
-  ([] (run-reverser-server 8080))
+(defn <handle-http-test [req]
+  (au/go
+    (let [{:keys [body]} req]
+      (clojure.string/upper-case (slurp body)))))
+
+(defn run-test-server
+  ([] (run-test-server 8080))
   ([port]
    (u/configure-logging)
    (let [on-connect (fn [conn conn-id path]
@@ -107,11 +133,11 @@
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn-id code reason])
          compression-type :smart
-         server (make-tube-server port on-connect on-disconnect
-                                  compression-type)]
+         server (make-tube-server port on-connect on-disconnect compression-type
+                                  <handle-http-test 1000)]
      (start server))))
 
 
 (defn -main
   [& args]
-  (run-reverser-server))
+  (run-test-server))
