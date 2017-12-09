@@ -48,7 +48,7 @@
                  :deploy-via :clojars}
 
   :main deercreeklabs.tube.server
-  ;;:pedantic? :abort
+  :pedantic? :abort
 
   :profiles
   {:dev
@@ -78,7 +78,7 @@
 
   :dependencies
   [[aleph "0.4.4"]
-   [bidi "2.1.2"]
+   [bidi "2.1.2" :exclusions [ring/ring-core]]
    [cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
    [clj-time "0.14.2"]
@@ -89,10 +89,10 @@
    [deercreeklabs/async-utils "0.1.6"]
    [deercreeklabs/baracus "0.1.1"]
    [deercreeklabs/log-utils "0.1.2"]
-   [http-kit "2.3.0-alpha4"]
-   [org.clojure/clojure "1.9.0-beta4"]
+   [org.clojure/clojure "1.9.0"]
    [org.clojure/clojurescript "1.9.946"]
    [org.clojure/core.async "0.3.465"]
+   [org.immutant/web "2.1.9" :exclusions [ch.qos.logback/logback-classic]]
    [prismatic/schema "1.1.7"]
    [primitive-math "0.1.6"]]
 

@@ -47,7 +47,7 @@
 
 #?(:clj
    (defn <make-ws-client-clj
-     [uri connected-ch on-error *handle-rcv *close-client]
+     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (au/go
        (let [fragment-size 65535
              opts {:max-frame-payload fragment-size
@@ -76,13 +76,15 @@
                                                 1000 :stream-closed))
                           (ca/put! connected-ch true))
                         (fn [err]
-                          (debugf "Websocket failed to connect. Error: %s" err)
+                          (when log-conn-failure?
+                            (debugf "Websocket failed to connect. Error: %s"
+                                    err))
                           (ca/put! connected-ch false)))
          (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
    (defn <make-ws-client-node
-     [uri connected-ch on-error *handle-rcv *close-client]
+     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (au/go
        (let [fragment-size 32000
              WSC (goog.object.get (js/require "websocket") "client")
@@ -105,14 +107,19 @@
                             (.on conn "message" msg-handler)
                             (reset! *conn conn)
                             (ca/put! connected-ch true))]
-         (.on client "connectFailed" #(ca/put! connected-ch false))
+         (.on client "connectFailed"
+              (fn [err]
+                (when log-conn-failure?
+                  (debugf "Websocket failed to connect. Error: %s"
+                          err))
+                (ca/put! connected-ch false)))
          (.on client "connect" conn-handler)
          (.connect ^js/WebSocketClient client uri)
          (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
    (defn <make-ws-client-browser
-     [uri connected-ch on-error *handle-rcv *close-client]
+     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (au/go
        (let [fragment-size 32000
              client (js/WebSocket. uri)
@@ -130,16 +137,20 @@
          (set! (.-onclose client) (fn [event]
                                     (@*close-client (.-code event)
                                      (.-reason event))))
-         (set! (.-onerror client) (fn [err]
-                                    (if @*connected?
-                                      (on-error err)
-                                      (ca/put! connected-ch false))))
+         (set! (.-onerror client)
+               (fn [err]
+                 (if @*connected?
+                   (on-error err)
+                   (when log-conn-failure?
+                     (debugf "Websocket failed to connect. Error: %s"
+                             err))
+                   (ca/put! connected-ch false))))
          (set! (.-onmessage client) msg-handler)
          (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
    (defn <make-ws-client-jsc-ios
-     [uri connected-ch on-error *handle-rcv *close-client]
+     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      ;; TODO: Implement jsc-ios
      ))
 
@@ -155,11 +166,13 @@
   "Will return a connected client or a closed channel (nil) on connection
    failure or timeout."
   (au/go
-    (let [{:keys [compression-type keep-alive-secs on-disconnect on-rcv]
+    (let [{:keys [compression-type keep-alive-secs on-disconnect on-rcv
+                  log-conn-failure?]
            :or {compression-type :smart
                 keep-alive-secs default-keepalive-secs
                 on-disconnect (constantly nil)
-                on-rcv (constantly nil)}} options
+                on-rcv (constantly nil)
+                log-conn-failure? true}} options
           *handle-rcv (atom nil)
           *close-client (atom nil)
           *shutdown? (atom false)
@@ -174,7 +187,7 @@
                          (errorf "Unexpected error in on-error.")
                          (lu/log-exception e))))
           wsc (au/<? (<make-ws-client uri connected-ch on-error *handle-rcv
-                                      *close-client))
+                                      *close-client log-conn-failure?))
           {:keys [sender closer fragment-size]} wsc
           close-client (fn [code reason]
                          (reset! *shutdown? true)

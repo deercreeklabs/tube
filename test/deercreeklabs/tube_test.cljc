@@ -90,5 +90,6 @@
    2000
    (ca/go
      (let [uri "ws://not-a-real-url.not-a-domain"
-           client (au/<? (tube-client/<make-tube-client uri 1000 {}))]
+           client (au/<? (tube-client/<make-tube-client
+                          uri 1000 {:log-conn-failure? false}))]
        (is (= nil client))))))
