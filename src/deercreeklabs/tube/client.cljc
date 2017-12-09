@@ -141,10 +141,11 @@
                (fn [err]
                  (if @*connected?
                    (on-error err)
-                   (when log-conn-failure?
-                     (debugf "Websocket failed to connect. Error: %s"
-                             err))
-                   (ca/put! connected-ch false))))
+                   (do
+                     (when log-conn-failure?
+                       (debugf "Websocket failed to connect. Error: %s"
+                               err))
+                     (ca/put! connected-ch false)))))
          (set! (.-onmessage client) msg-handler)
          (u/sym-map sender closer fragment-size)))))
 

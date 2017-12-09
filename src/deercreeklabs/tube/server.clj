@@ -8,8 +8,11 @@
    [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
+   [immutant.util :as iu]
    [immutant.web :as iw]
    [immutant.web.async :as iwa]
+   [immutant.web.undertow :as iwu]
+   [less.awful.ssl :as las]
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   (:import
@@ -44,14 +47,14 @@
   (fn handle-ws [req]
     (try
       (let [{:keys [uri remote-addr]} req
-            fragment-size 16000
+            fragment-size 200000
             conn-id (swap! *conn-id #(inc (int %)))
             *channel (atom nil)
             sender (fn [data]
                      (when-let [channel @*channel]
                        (iwa/send! channel data)))
             closer #(when-let [channel @*channel]
-                       (iwa/close channel))
+                      (iwa/close channel))
             conn (connection/make-connection
                   conn-id on-connect uri sender closer fragment-size
                   compression-type false)
@@ -85,7 +88,7 @@
                     (ca/go
                       (try
                         (let [ret-ch (<handle-http req)
-                              timeout-ch (ca/timeout http-timeout-ms)
+                              timeout-ch (ca/timeout (or http-timeout-ms 1000))
                               [ret ch] (au/alts? [ret-ch timeout-ch])
                               ret (cond
                                     (map? ret) ret
@@ -98,29 +101,43 @@
                           (lu/log-exception e)))))]
       (iwa/as-channel req (u/sym-map on-open)))))
 
-(defn make-tube-server
-  ([port on-connect on-disconnect compression-type]
-   (make-tube-server port on-connect on-disconnect compression-type nil 0))
-  ([port on-connect on-disconnect compression-type <handle-http http-timeout-ms]
-   (let [*conn-count (atom 0)
-         *stopper (atom nil)
-         *conn-id (atom 0)
-         ws-handler (make-ws-handler on-connect on-disconnect compression-type
-                                     *conn-count *conn-id)
-         http-handler (make-http-handler <handle-http http-timeout-ms)
-         handler (fn [req]
-                   (if (:websocket? req)
-                     (ws-handler req)
-                     (http-handler req)))
-         starter (fn []
-                   (iw/run handler {:port port})
-                   (infof "Started server on port %s." port))]
-     (->TubeServer *conn-count starter *stopper))))
-
 (defn <handle-http-test [req]
   (au/go
     (let [{:keys [body]} req]
       (clojure.string/upper-case (slurp body)))))
+
+(defn make-tube-server
+  ([port on-connect on-disconnect compression-type]
+   (make-tube-server port on-connect on-disconnect compression-type {}))
+  ([port on-connect on-disconnect compression-type opts]
+   (let [{:keys [<handle-http
+                 http-timeout-ms
+                 keystore
+                 keystore-password]} opts
+         *conn-count (atom 0)
+         *stopper (atom nil)
+         *conn-id (atom 0)
+         ws-handler (make-ws-handler on-connect on-disconnect compression-type
+                                     *conn-count *conn-id)
+         http-handler (if <handle-http
+                        (make-http-handler <handle-http http-timeout-ms)
+                        (make-http-handler <handle-http-test 1000))
+         handler (fn [req]
+                   (if (:websocket? req)
+                     (ws-handler req)
+                     (http-handler req)))
+         buffer-size 256000 ;; Must be bigger than fragment-size above
+         options (if keystore
+                   (iwu/options :ssl-port port
+                                :keystore keystore
+                                :key-password keystore-password
+                                :buffer-size buffer-size)
+                   (iwu/options :port port
+                                :buffer-size buffer-size))
+         starter (fn []
+                   (iw/run handler options)
+                   (infof "Started server on port %s." port))]
+     (->TubeServer *conn-count starter *stopper))))
 
 (defn run-test-server
   ([] (run-test-server 8080))
@@ -133,8 +150,11 @@
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn-id code reason])
          compression-type :smart
+         opts {:keystore (System/getenv "TUBE_JKS_KEYSTORE_PATH")
+               :keystore-password (System/getenv "TUBE_JKS_KEYSTORE_PASSWORD")}
          server (make-tube-server port on-connect on-disconnect compression-type
-                                  <handle-http-test 1000)]
+                                 ;; opts
+                                  )]
      (start server))))
 
 

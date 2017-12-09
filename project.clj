@@ -48,7 +48,7 @@
                  :deploy-via :clojars}
 
   :main deercreeklabs.tube.server
-  :pedantic? :abort
+  ;;:pedantic? :abort
 
   :profiles
   {:dev
@@ -88,6 +88,7 @@
    [deercreeklabs/async-utils "0.1.6"]
    [deercreeklabs/baracus "0.1.1"]
    [deercreeklabs/log-utils "0.1.2"]
+   [less-awful-ssl "1.0.1"]
    [org.clojure/clojure "1.9.0"]
    [org.clojure/clojurescript "1.9.946"]
    [org.clojure/core.async "0.3.465"]

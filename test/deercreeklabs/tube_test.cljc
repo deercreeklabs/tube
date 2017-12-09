@@ -56,7 +56,7 @@
 
 (deftest test-round-trip-w-large-msg
   (au/test-async
-   #?(:clj 15000
+   #?(:clj 30000
       :cljs 60000)
    (ca/go
      (let [msg (get-lots-of-bytes)
@@ -93,3 +93,5 @@
            client (au/<? (tube-client/<make-tube-client
                           uri 1000 {:log-conn-failure? false}))]
        (is (= nil client))))))
+
+;; TODO: Add tests for HTTP handler
