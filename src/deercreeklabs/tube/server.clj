@@ -12,7 +12,6 @@
    [immutant.web :as iw]
    [immutant.web.async :as iwa]
    [immutant.web.undertow :as iwu]
-   [less.awful.ssl :as las]
    [schema.core :as s]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   (:import
@@ -61,7 +60,7 @@
             on-open (fn [channel]
                       (swap! *conn-count #(inc (int %)))
                       (reset! *channel channel)
-                      (debugf "Got conn on %s from %s. Conn count: %d"
+                      (debugf "Opened conn on %s from %s. Conn count: %d"
                               uri remote-addr @*conn-count))
             on-close  (fn [channel {:keys [code reason]}]
                         (swap! *conn-count #(dec (int %)))
@@ -153,8 +152,7 @@
          opts {:keystore (System/getenv "TUBE_JKS_KEYSTORE_PATH")
                :keystore-password (System/getenv "TUBE_JKS_KEYSTORE_PASSWORD")}
          server (make-tube-server port on-connect on-disconnect compression-type
-                                 ;; opts
-                                  )]
+                                  opts)]
      (start server))))
 
 
