@@ -74,7 +74,6 @@
         (let [ret-ch (<handle-http req)
               timeout-ch (ca/timeout (or http-timeout-ms 1000))
               [ret ch] (au/alts? [ret-ch timeout-ch])]
-          (debugf "@@@@ in tube/handle-http. ret: %s" ret)
           (http/send! channel (cond
                                 (map? ret) ret
                                 (string? ret) {:status 200 :body ret}
