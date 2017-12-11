@@ -8,11 +8,7 @@
    [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
-   [immutant.util :as iu]
-   [immutant.web :as iw]
-   [immutant.web.async :as iwa]
-   [immutant.web.undertow :as iwu]
-   [schema.core :as s]
+   [org.httpkit.server :as http]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   (:import
    (java.nio HeapByteBuffer)))
@@ -43,62 +39,50 @@
 
 (defn make-ws-handler
   [on-connect on-disconnect compression-type *conn-count *conn-id]
-  (fn handle-ws [req]
+  (fn handle-ws [req channel]
     (try
       (let [{:keys [uri remote-addr]} req
-            fragment-size 200000
+            fragment-size 65000 ;; TODO: Figure out this size
             conn-id (swap! *conn-id #(inc (int %)))
-            *channel (atom nil)
+            _ (swap! *conn-count #(inc (int %)))
+            _ (debugf "Opened conn %s on %s from %s. Conn count: %d"
+                      conn-id uri remote-addr @*conn-count)
             sender (fn [data]
-                     (when-let [channel @*channel]
-                       (iwa/send! channel data)))
-            closer #(when-let [channel @*channel]
-                      (iwa/close channel))
+                     (http/send! channel data))
+            closer #(http/close channel)
             conn (connection/make-connection
                   conn-id on-connect uri sender closer fragment-size
                   compression-type false)
-            on-open (fn [channel]
-                      (swap! *conn-count #(inc (int %)))
-                      (reset! *channel channel)
-                      (debugf "Opened conn on %s from %s. Conn count: %d"
-                              uri remote-addr @*conn-count))
-            on-close  (fn [channel {:keys [code reason]}]
+            on-close  (fn [reason]
                         (swap! *conn-count #(dec (int %)))
-                        (debugf (str "Closed conn on %s from %s. "
-                                     "Reason: %s.  Conn count: %s.")
-                                uri remote-addr reason @*conn-count)
-                        (on-disconnect conn-id code reason))
-            on-error (fn [channel e]
-                       (let [msg (lu/get-exception-msg e)]
-                         (when-not (clojure.string/includes?
-                                    msg "Connection reset by peer")
-                           (errorf "Error in websocket:")
-                           (lu/log-exception e))))
-            on-message (fn [channel message]
-                         (connection/handle-data conn message))]
-        (iwa/as-channel req (u/sym-map on-open on-close on-error on-message)))
+                        (debugf (str "Closed conn %s on %s from %s. "
+                                     "Conn count: %s.")
+                                conn-id uri remote-addr @*conn-count)
+                        (on-disconnect conn-id 1000 reason))
+            on-rcv (fn [data]
+                     (connection/handle-data conn data))]
+        (http/on-receive channel on-rcv)
+        (http/on-close channel on-close))
       (catch Exception e
         (errorf "Unexpected exception in handle-ws")
         (lu/log-exception e)))))
 
 (defn make-http-handler [<handle-http http-timeout-ms]
-  (fn handle-http [req]
-    (let [on-open (fn [stream]
-                    (ca/go
-                      (try
-                        (let [ret-ch (<handle-http req)
-                              timeout-ch (ca/timeout (or http-timeout-ms 1000))
-                              [ret ch] (au/alts? [ret-ch timeout-ch])
-                              ret (cond
-                                    (map? ret) ret
-                                    (string? ret) {:status 200 :body ret}
-                                    (= timeout-ch ch) {:status 504 :body ""}
-                                    :else {:status 500 :body "Bad response"})]
-                          (iwa/send! stream ret {:close? true}))
-                        (catch Exception e
-                          (errorf "Unexpected exception in http-handler.")
-                          (lu/log-exception e)))))]
-      (iwa/as-channel req (u/sym-map on-open)))))
+  (fn <handle-http [req channel]
+    (au/go
+      (try
+        (let [ret-ch (<handle-http req)
+              timeout-ch (ca/timeout (or http-timeout-ms 1000))
+              [ret ch] (au/alts? [ret-ch timeout-ch])]
+          (debugf "@@@@ in tube/handle-http. ret: %s" ret)
+          (http/send! channel (cond
+                                (map? ret) ret
+                                (string? ret) {:status 200 :body ret}
+                                (= timeout-ch ch) {:status 504 :body ""}
+                                :else {:status 500 :body "Bad response"})))
+        (catch Exception e
+          (errorf "Unexpected exception in http-handler.")
+          (lu/log-exception e))))))
 
 (defn <handle-http-test [req]
   (au/go
@@ -110,9 +94,7 @@
    (make-tube-server port on-connect on-disconnect compression-type {}))
   ([port on-connect on-disconnect compression-type opts]
    (let [{:keys [<handle-http
-                 http-timeout-ms
-                 keystore
-                 keystore-password]} opts
+                 http-timeout-ms]} opts
          *conn-count (atom 0)
          *stopper (atom nil)
          *conn-id (atom 0)
@@ -122,19 +104,12 @@
                         (make-http-handler <handle-http http-timeout-ms)
                         (make-http-handler <handle-http-test 1000))
          handler (fn [req]
-                   (if (:websocket? req)
-                     (ws-handler req)
-                     (http-handler req)))
-         buffer-size 256000 ;; Must be bigger than fragment-size above
-         options (if keystore
-                   (iwu/options :ssl-port port
-                                :keystore keystore
-                                :key-password keystore-password
-                                :buffer-size buffer-size)
-                   (iwu/options :port port
-                                :buffer-size buffer-size))
+                   (http/with-channel req channel
+                     (if (http/websocket? channel)
+                       (ws-handler req channel)
+                       (http-handler req channel))))
          starter (fn []
-                   (iw/run handler options)
+                   (reset! *stopper (http/run-server handler (u/sym-map port)))
                    (infof "Started server on port %s." port))]
      (->TubeServer *conn-count starter *stopper))))
 
@@ -149,10 +124,8 @@
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn-id code reason])
          compression-type :smart
-         opts {:keystore (System/getenv "TUBE_JKS_KEYSTORE_PATH")
-               :keystore-password (System/getenv "TUBE_JKS_KEYSTORE_PASSWORD")}
-         server (make-tube-server port on-connect on-disconnect compression-type
-                                  opts)]
+         server (make-tube-server port on-connect on-disconnect
+                                  compression-type)]
      (start server))))
 
 
