@@ -56,7 +56,7 @@
             on-close  (fn [reason]
                         (swap! *conn-count #(dec (int %)))
                         (debugf (str "Closed conn %s on %s from %s. "
-                                     "Conn count: %s.")
+                                     "Conn count: %s")
                                 conn-id uri remote-addr @*conn-count)
                         (on-disconnect conn-id 1000 reason))
             on-rcv (fn [data]
@@ -68,7 +68,7 @@
         (lu/log-exception e)))))
 
 (defn make-http-handler [<handle-http http-timeout-ms]
-  (fn <handle-http [req channel]
+  (fn [req channel]
     (au/go
       (try
         (let [ret-ch (<handle-http req)
