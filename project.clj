@@ -93,7 +93,6 @@
    [org.clojure/clojure "1.9.0"]
    [org.clojure/clojurescript "1.9.946"]
    [org.clojure/core.async "0.3.465"]
-   [org.immutant/web "2.1.9" :exclusions [ch.qos.logback/logback-classic]]
    [prismatic/schema "1.1.7"]
    [primitive-math "0.1.6"]]
 
