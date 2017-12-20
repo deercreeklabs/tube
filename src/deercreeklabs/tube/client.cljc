@@ -37,12 +37,13 @@
   (send [this data] "Send binary bytes over this tube")
   (close [this] [this code reason] "Close this tube"))
 
-(deftype TubeClient [conn]
+(deftype TubeClient [conn *shutdown?]
   ITubeClient
   (send [this data]
     (connection/send conn data))
 
   (close [this]
+    (reset! *shutdown? true)
     (connection/close conn)))
 
 #?(:clj
@@ -216,7 +217,7 @@
                   (= ready-ch ch)
                   (do
                     (start-keep-alive-loop conn keep-alive-secs *shutdown?)
-                    (->TubeClient conn))
+                    (->TubeClient conn *shutdown?))
 
                   (> (#?(:clj long :cljs identity) (u/get-current-time-ms))
                      (#?(:clj long :cljs identity) expiry-ms))
