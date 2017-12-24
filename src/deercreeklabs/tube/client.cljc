@@ -204,25 +204,38 @@
           _ (reset! *close-client close-client)
           [connected? ch] (ca/alts! [connected-ch
                                      (ca/timeout connect-timeout-ms)])]
-      (when (and (= connected-ch ch)
-                 connected?)
-        (sender (ba/encode-int fragment-size))
-        (let [expiry-ms (+ (#?(:clj long :cljs identity) ;; ensure primitive
-                            (u/get-current-time-ms))
-                           (#?(:clj long :cljs identity) connect-timeout-ms))]
-          (loop []
-            (when-not @*shutdown?
-              (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
-                (cond
-                  (= ready-ch ch)
-                  (do
-                    (start-keep-alive-loop conn keep-alive-secs *shutdown?)
-                    (->TubeClient conn *shutdown?))
+      (if-not (and (= connected-ch ch)
+                   connected?)
+        (do
+          (errorf "Websocket to %s failed to connect before timeout (%s ms)"
+                 uri connect-timeout-ms)
+          (closer)
+          nil)
+        (do
+          (sender (ba/encode-int fragment-size))
+          (let [expiry-ms (+ (#?(:clj long :cljs identity) ;; ensure primitive
+                              (u/get-current-time-ms))
+                             (#?(:clj long :cljs identity) connect-timeout-ms))]
+            (loop []
+              (when-not @*shutdown?
+                (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
+                  (cond
+                    (= ready-ch ch)
+                    (do
+                      (debugf "Websocket to %s is ready." uri)
+                      (start-keep-alive-loop conn keep-alive-secs *shutdown?)
+                      (->TubeClient conn *shutdown?))
 
-                  (> (#?(:clj long :cljs identity) (u/get-current-time-ms))
-                     (#?(:clj long :cljs identity) expiry-ms))
-                  nil
+                    (> (#?(:clj long :cljs identity) (u/get-current-time-ms))
+                       (#?(:clj long :cljs identity) expiry-ms))
+                    (do
+                      (errorf
+                       (str "Websocket to %s connected, but did not complete "
+                            "negotiation before timeout (%s ms)")
+                       uri connect-timeout-ms)
+                      (closer)
+                      nil)
 
-                  :else
-                  ;; Wait for the protocol negotiation to happen
-                  (recur))))))))))
+                    :else
+                    ;; Wait for the protocol negotiation to happen
+                    (recur)))))))))))
