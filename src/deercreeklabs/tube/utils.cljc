@@ -90,7 +90,7 @@
     :output-fn lu/short-log-output-fn
     :appenders
     {:println {:ns-blacklist
-               ["io.netty.*" "org.projectodd.*"]}}}))
+               ["io.netty.*" "manifold.utils"]}}}))
 
 (s/defn get-current-time-ms :- s/Num
   []

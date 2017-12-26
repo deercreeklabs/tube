@@ -53,15 +53,18 @@
        (let [fragment-size 65535
              opts {:max-frame-payload fragment-size
                    :max-frame-size fragment-size}
-             socket (aleph/websocket-client uri opts)
+             socket-deferred (aleph/websocket-client uri opts)
              closer (fn []
                       (try
-                        (s/close! @socket)
+                        (-> (d/let-flow [socket socket-deferred]
+                              (s/close! socket))
+                            (d/catch ;; ignore if socket didn't open
+                                (constantly nil)))
                         (catch Exception e
                           (errorf "Unexpected error in ws-client closer.")
                           (lu/log-exception e))))
              sender (fn [data]
-                      (let [ret (s/put! @socket data)]
+                      (let [ret (s/put! @socket-deferred data)]
                         (d/on-realized
                          ret
                          (fn [x]
@@ -70,7 +73,7 @@
                          (fn [x]
                            (on-error (str "Send to " uri
                                           " failed. Error: " x))))))]
-         (d/on-realized socket
+         (d/on-realized socket-deferred
                         (fn [stream]
                           (s/consume #(@*handle-rcv %) stream)
                           (s/on-closed stream #(@*close-client
@@ -207,12 +210,16 @@
       (if-not (and (= connected-ch ch)
                    connected?)
         (do
-          (errorf "Websocket to %s failed to connect before timeout (%s ms)"
-                 uri connect-timeout-ms)
+
+          (when log-conn-failure?
+            (errorf "Websocket to %s failed to connect before timeout (%s ms)"
+                    uri connect-timeout-ms))
           (closer)
           nil)
         (do
+          (debugf "client: About to send fragment-size.")
           (sender (ba/encode-int fragment-size))
+          (debugf "client: Done sending fragment-size.")
           (let [expiry-ms (+ (#?(:clj long :cljs identity) ;; ensure primitive
                               (u/get-current-time-ms))
                              (#?(:clj long :cljs identity) connect-timeout-ms))]
