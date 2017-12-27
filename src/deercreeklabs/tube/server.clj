@@ -71,7 +71,7 @@
   (fn [req channel]
     (au/go
       (try
-        (let [ret-ch (<handle-http req)
+        (let [ret-ch (<handle-http (update req :body slurp))
               timeout-ch (ca/timeout (or http-timeout-ms 1000))
               [ret ch] (au/alts? [ret-ch timeout-ch])]
           (http/send! channel (cond
