@@ -71,7 +71,6 @@
   (fn [req channel]
     (au/go
       (try
-        ;; TODO: Why is http handler getting called on ws keepalives?
         (let [ret-ch (<handle-http (update req :body #(if %
                                                         (slurp %)
                                                         "")))
@@ -121,8 +120,6 @@
    (u/configure-logging)
    (let [<handle-http (fn [req]
                         (au/go
-                          (debugf "Entering <handle-http.")
-                          (debugs req)
                           {:status 200
                            :headers {"content-type" "text/plain"}
                            :body "Yo"}))

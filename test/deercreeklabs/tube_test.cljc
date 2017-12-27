@@ -25,23 +25,27 @@
 
 (def port 8080)
 
-(defn <send-ws-msg-and-return-rsp [msg timeout]
-  (ca/go
-    (let [uri (str "ws://localhost:" port)
-          client-rcv-ch (ca/chan)
-          options {:on-rcv (fn [conn data]
-                             (ca/put! client-rcv-ch data))}
-          client (au/<? (tube-client/<make-tube-client uri 1000 options))
-          _ (is (not= nil client))
-          _ (tube-client/send client msg)
-          [ret ch] (ca/alts! [client-rcv-ch (ca/timeout timeout)])]
-      (tube-client/close client)
-      (if (= client-rcv-ch ch)
-        ret
-        (throw (ex-info "Timed out waiting for client response"
-                        {:type :execution-error
-                         :subtype :timeout
-                         :timeout timeout}))))))
+(defn <send-ws-msg-and-return-rsp
+  ([msg timeout]
+   (<send-ws-msg-and-return-rsp msg timeout 25))
+  ([msg timeout keep-alive-secs]
+   (ca/go
+     (let [uri (str "ws://localhost:" port)
+           client-rcv-ch (ca/chan)
+           options {:on-rcv (fn [conn data]
+                              (ca/put! client-rcv-ch data))
+                    :keep-alive-secs keep-alive-secs}
+           client (au/<? (tube-client/<make-tube-client uri 1000 options))
+           _ (is (not= nil client))
+           _ (tube-client/send client msg)
+           [ret ch] (ca/alts! [client-rcv-ch (ca/timeout timeout)])]
+       (tube-client/close client)
+       (if (= client-rcv-ch ch)
+         ret
+         (throw (ex-info "Timed out waiting for client response"
+                         {:type :execution-error
+                          :subtype :timeout
+                          :timeout timeout})))))))
 
 (defn get-lots-of-bytes []
   #?(:clj (ba/read-byte-array-from-file "lots_o_bytes.bin")
