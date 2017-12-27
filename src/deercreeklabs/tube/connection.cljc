@@ -111,7 +111,9 @@
   (handle-connected* [this data]
     (let [[peer-fragment-size extra-data] (ba/decode-int data)
           state @*state]
-      (debugf "##### in handle-connected* #####")
+      (debugf "##### in handle-connected* (%s) #####" (if client?
+                                                        "client"
+                                                        "server"))
       (debugs conn-id state peer-fragment-size extra-data )
       (reset! *peer-fragment-size peer-fragment-size)
       (when-not client?
@@ -129,6 +131,9 @@
       (on-connect this conn-id path)))
 
   (handle-ready* [this data]
+    (debugf "##### in handle-ready* (%s) #####" (if client?
+                                                  "client"
+                                                  "server"))
     (let [masked (bit-and (aget #^bytes data 0) 0xf8)
           code (bit-shift-right masked 3)]
       (case code
