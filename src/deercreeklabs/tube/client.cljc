@@ -57,7 +57,7 @@
              closer (fn []
                       (try
                         (-> (d/let-flow [socket socket-deferred]
-                              (s/close! socket))
+                              (s/close! @socket))
                             (d/catch ;; ignore if socket didn't open
                                 (constantly nil)))
                         (catch Exception e
@@ -210,16 +210,13 @@
       (if-not (and (= connected-ch ch)
                    connected?)
         (do
-
           (when log-conn-failure?
             (errorf "Websocket to %s failed to connect before timeout (%s ms)"
                     uri connect-timeout-ms))
           (closer)
           nil)
         (do
-          (debugf "client: About to send fragment-size.")
           (sender (ba/encode-int fragment-size))
-          (debugf "client: Done sending fragment-size.")
           (let [expiry-ms (+ (#?(:clj long :cljs identity) ;; ensure primitive
                               (u/get-current-time-ms))
                              (#?(:clj long :cljs identity) connect-timeout-ms))]

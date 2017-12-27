@@ -1,7 +1,6 @@
 (ns deercreeklabs.tube.server
   (:gen-class)
   (:require
-   [aleph.http :as http]
    [clojure.core.async :as ca]
    [clojure.java.io :as io]
    [deercreeklabs.async-utils :as au]
@@ -9,8 +8,7 @@
    [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
-   [manifold.deferred :as d]
-   [manifold.stream :as s]
+   [org.httpkit.server :as http]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   (:import
    (java.nio HeapByteBuffer)))
@@ -22,18 +20,18 @@
   (stop [this] "Stop serving")
   (get-conn-count [this] "Return the number of current connections"))
 
-(deftype TubeServer [*conn-count starter *server]
+(deftype TubeServer [*conn-count starter *stopper]
   ITubeServer
   (start [this]
-    (if @*server
+    (if @*stopper
       (infof "Server is already started.")
-      (starter)))
+      (reset! *stopper (starter))))
 
   (stop [this]
-    (if-let [^java.io.Closeable server @*server]
+    (if-let [stopper @*stopper]
       (do
-        (.close server)
-        (reset! *server nil))
+        (stopper)
+        (reset! *stopper nil))
       (infof "Server is not running.")))
 
   (get-conn-count [this]
@@ -41,7 +39,7 @@
 
 (defn make-ws-handler
   [on-connect on-disconnect compression-type *conn-count *conn-id]
-  (fn handle-ws [req socket]
+  (fn handle-ws [req channel]
     (try
       (let [{:keys [uri remote-addr]} req
             fragment-size 65000 ;; TODO: Figure out this size
@@ -50,50 +48,40 @@
             _ (debugf "Opened conn %s on %s from %s. Conn count: %d"
                       conn-id uri remote-addr @*conn-count)
             sender (fn [data]
-                     (s/put! socket data))
-            _ (debugf "1")
-            closer #(s/close! socket)
-            _ (debugf "2")
+                     (http/send! channel data))
+            closer #(http/close channel)
             conn (connection/make-connection
                   conn-id on-connect uri sender closer fragment-size
                   compression-type false)
-            _ (debugf "3")
             on-close  (fn [reason]
                         (swap! *conn-count #(dec (int %)))
                         (debugf (str "Closed conn %s on %s from %s. "
                                      "Conn count: %s")
                                 conn-id uri remote-addr @*conn-count)
                         (on-disconnect conn-id 1000 reason))
-            _ (debugf "4")
             on-rcv (fn [data]
-                     (debugf "@@@ server: Entering on-rcv. @@@")
                      (connection/handle-data conn data))]
-        (debugf "5")
-        (s/consume on-rcv socket)
-        (debugf "6")
-        (s/on-closed socket on-close)
-        (debugf "7"))
+        (http/on-receive channel on-rcv)
+        (http/on-close channel on-close))
       (catch Exception e
         (errorf "Unexpected exception in handle-ws")
         (lu/log-exception e)))))
 
 (defn make-http-handler [<handle-http http-timeout-ms]
-  (fn [req]
-    (s/take!
-     (s/->source
-      (au/go
-        (try
-          (let [ret-ch (<handle-http req)
-                timeout-ch (ca/timeout (or http-timeout-ms 1000))
-                [ret ch] (au/alts? [ret-ch timeout-ch])]
-            (cond
-              (map? ret) ret
-              (string? ret) {:status 200 :body ret}
-              (= timeout-ch ch) {:status 504 :body ""}
-              :else {:status 500 :body "Bad response"}))
-          (catch Exception e
-            (errorf "Unexpected exception in http-handler.")
-            (lu/log-exception e))))))))
+  (fn [req channel]
+    (au/go
+      (try
+        (let [ret-ch (<handle-http req)
+              timeout-ch (ca/timeout (or http-timeout-ms 1000))
+              [ret ch] (au/alts? [ret-ch timeout-ch])]
+          (http/send! channel (cond
+                                (map? ret) ret
+                                (string? ret) {:status 200 :body ret}
+                                (= timeout-ch ch) {:status 504 :body ""}
+                                :else {:status 500 :body "Bad response"})))
+        (catch Exception e
+          (errorf "Unexpected exception in http-handler.")
+          (lu/log-exception e))))))
 
 (defn <handle-http-test [req]
   (au/go
@@ -107,7 +95,7 @@
    (let [{:keys [<handle-http
                  http-timeout-ms]} opts
          *conn-count (atom 0)
-         *server (atom nil)
+         *stopper (atom nil)
          *conn-id (atom 0)
          ws-handler (make-ws-handler on-connect on-disconnect compression-type
                                      *conn-count *conn-id)
@@ -115,16 +103,14 @@
                         (make-http-handler <handle-http http-timeout-ms)
                         (make-http-handler <handle-http-test 1000))
          handler (fn [req]
-                   (-> (d/let-flow [socket (http/websocket-connection req)]
-                         (ws-handler req socket))
-                       (d/catch ;; non-websocket request
-                           (fn [_]
-                             (http-handler req)))))
+                   (http/with-channel req channel
+                     (if (http/websocket? channel)
+                       (ws-handler req channel)
+                       (http-handler req channel))))
          starter (fn []
-                   (let [server (http/start-server handler (u/sym-map port))]
-                     (reset! *server server))
+                   (reset! *stopper (http/run-server handler (u/sym-map port)))
                    (infof "Started server on port %s." port))]
-     (->TubeServer *conn-count starter *server))))
+     (->TubeServer *conn-count starter *stopper))))
 
 (defn run-test-server
   ([] (run-test-server 8080))

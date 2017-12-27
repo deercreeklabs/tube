@@ -97,29 +97,22 @@
     (closer))
 
   (handle-data [this data]
-    (try
-      (case @*state
-        :connected (handle-connected* this data)
-        :ready (handle-ready* this data)
-        :msg-in-flight (handle-msg-in-flight* this data)
-        :shutdown nil)
-      (catch #?(:clj Exception :cljs js/Error) e
-        (errorf "Unexpected exception in connection/handle-data.")
-        (lu/log-exception e)
-        (throw e))))
+    (case @*state
+      :connected (handle-connected* this data)
+      :ready (handle-ready* this data)
+      :msg-in-flight (handle-msg-in-flight* this data)
+      :shutdown nil))
 
   (handle-connected* [this data]
     (let [[peer-fragment-size extra-data] (ba/decode-int data)
-          state @*state]
+      state @*state]
       (debugf "##### in handle-connected* (%s) #####" (if client?
                                                         "client"
                                                         "server"))
       (debugs conn-id state peer-fragment-size extra-data )
       (reset! *peer-fragment-size peer-fragment-size)
       (when-not client?
-        (debugf "server: About to send fragment-size.")
-        (sender (ba/encode-int fragment-size))
-        (debugf "server: Done sending fragment-size."))
+        (sender (ba/encode-int fragment-size)))
       (reset! *state :ready)
       (when extra-data
         (throw (ex-info "Extra data in negotiation header."
