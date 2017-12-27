@@ -71,7 +71,10 @@
   (fn [req channel]
     (au/go
       (try
-        (let [ret-ch (<handle-http (update req :body slurp))
+        ;; TODO: Why is http handler getting called on ws keepalives?
+        (let [ret-ch (<handle-http (update req :body #(if %
+                                                        (slurp %)
+                                                        "")))
               timeout-ch (ca/timeout (or http-timeout-ms 1000))
               [ret ch] (au/alts? [ret-ch timeout-ch])]
           (http/send! channel (cond
@@ -116,15 +119,23 @@
   ([] (run-test-server 8080))
   ([port]
    (u/configure-logging)
-   (let [on-connect (fn [conn conn-id path]
+   (let [<handle-http (fn [req]
+                        (au/go
+                          (debugf "Entering <handle-http.")
+                          (debugs req)
+                          {:status 200
+                           :headers {"content-type" "text/plain"}
+                           :body "Yo"}))
+         on-connect (fn [conn conn-id path]
                       (let [on-rcv (fn [conn data]
                                      (connection/send
                                       conn (ba/reverse-byte-array data)))]
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn-id code reason])
          compression-type :smart
+         opts (u/sym-map <handle-http)
          server (make-tube-server port on-connect on-disconnect
-                                  compression-type)]
+                                  compression-type opts)]
      (start server))))
 
 

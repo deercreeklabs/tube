@@ -1,5 +1,6 @@
 (ns deercreeklabs.tube-test
   (:require
+   #?(:clj [aleph.http :as aleph])
    [clojure.core.async :as ca]
    [clojure.test :refer [deftest is use-fixtures]]
    [deercreeklabs.async-utils :as au]
@@ -94,4 +95,9 @@
                           uri 1000 {:log-conn-failure? false}))]
        (is (= nil client))))))
 
-;; TODO: Add tests for HTTP handler
+;; TODO: Make this work in cljs
+#?(:clj
+   (deftest ^:the-one test-http-handler
+     (let [ret @(aleph/get "http://localhost:8080")
+           body (-> ret :body slurp)]
+       (is (= "Yo" body)))))
