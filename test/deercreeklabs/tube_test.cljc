@@ -9,7 +9,7 @@
    [deercreeklabs.tube.client :as tube-client]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
-   [org.httpkit.client :as http]
+   #?(:clj [org.httpkit.client :as http])
    [schema.core :as s :include-macros true]
    [schema.test :as st]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]]))
@@ -120,5 +120,3 @@
    (deftest test-http-handler
      (let [ret @(http/get "http://localhost:8080")]
        (is (= "Yo" (:body ret))))))
-
-;; TODO: test on-disconnect
