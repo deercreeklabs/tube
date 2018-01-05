@@ -53,6 +53,7 @@
                   compression-type false)
             on-close  (fn [reason]
                         (swap! *conn-count #(dec (int %)))
+                        (connection/on-disconnect* conn 1000 reason)
                         (on-disconnect conn 1000 reason))
             on-rcv (fn [data]
                      (connection/handle-data conn data))]

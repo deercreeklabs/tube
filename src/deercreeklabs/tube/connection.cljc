@@ -24,7 +24,7 @@
 
 (defprotocol IConnection
   (set-on-rcv [this on-rcv] "Set the receive handler")
-  (set-on-close [this on-close] "Set the close handler")
+  (set-on-disconnect [this on-disconnect])
   (get-conn-id [this] "Return the connection id")
   (get-uri [this])
   (get-remote-addr [this])
@@ -37,18 +37,42 @@
   (handle-connected* [this data] "Internal use only")
   (handle-ready* [this data] "Internal use only")
   (handle-ready-end* [this data compressed?] "Internal use only")
-  (handle-msg-in-flight* [this data] "Internal use only"))
+  (handle-msg-in-flight* [this data] "Internal use only")
+  (on-disconnect* [this code reason] "Internal use only"))
+
+(defn send* [conn data compress *peer-fragment-size sender]
+  (let [[compression-id compressed] (compress data)
+        frags (ba/byte-array->fragments compressed
+                                        ;; leave room for header
+                                        (- (int @*peer-fragment-size) 6))
+        num-frags (count frags)
+        _ (when (> num-frags (int max-num-fragments))
+            (throw (ex-info "Maximum message fragments exceeded."
+                            {:type :illegal-argument
+                             :subtype :too-many-fragments
+                             :num-fragments num-frags
+                             :max-num-framents max-num-fragments})))
+        first-byte (bit-shift-left compression-id 3)
+        header (if (<= num-frags 7)
+                 (ba/byte-array [(bit-or first-byte num-frags)])
+                 (ba/concat-byte-arrays
+                  [(ba/byte-array [first-byte])
+                   (ba/encode-int num-frags)]))
+        frags (update frags 0 #(ba/concat-byte-arrays [header %]))]
+    (doseq [frag frags]
+      (sender frag))))
 
 (deftype Connection
     [conn-id uri remote-addr on-connect sender closer fragment-size
-     compress client? output-stream *on-rcv *on-close *state *peer-fragment-size
-     *num-fragments-expected *num-fragments-rcvd *cur-msg-compressed?]
+     compress client? output-stream *on-rcv *on-disconnect *state
+     *peer-fragment-size *num-fragments-expected *num-fragments-rcvd
+     *cur-msg-compressed?]
   IConnection
   (set-on-rcv [this on-rcv]
     (reset! *on-rcv on-rcv))
 
-  (set-on-close [this on-close]
-    (reset! *on-close on-close))
+  (set-on-disconnect [this on-disconnect]
+    (reset! *on-disconnect on-disconnect))
 
   (get-conn-id [this]
     conn-id)
@@ -63,31 +87,18 @@
     @*state)
 
   (send [this data]
-    (when (not (#{:ready :msg-in-flight} @*state))
-      (throw (ex-info "Attempt to send before negotiation is complete."
-                      {:type :execution-error
-                       :subtype :send-before-negotiation-complete
-                       :state @*state})))
-    (let [[compression-id compressed] (compress data)
-          frags (ba/byte-array->fragments compressed
-                                          ;; leave room for header
-                                          (- (int @*peer-fragment-size) 6))
-          num-frags (count frags)
-          _ (when (> num-frags (int max-num-fragments))
-              (throw (ex-info "Maximum message fragments exceeded."
-                              {:type :illegal-argument
-                               :subtype :too-many-fragments
-                               :num-fragments num-frags
-                               :max-num-framents max-num-fragments})))
-          first-byte (bit-shift-left compression-id 3)
-          header (if (<= num-frags 7)
-                   (ba/byte-array [(bit-or first-byte num-frags)])
-                   (ba/concat-byte-arrays
-                    [(ba/byte-array [first-byte])
-                     (ba/encode-int num-frags)]))
-          frags (update frags 0 #(ba/concat-byte-arrays [header %]))]
-      (doseq [frag frags]
-        (sender frag))))
+    (case @*state
+      :connected (throw (ex-info
+                         "Attempt to send before negotiation is complete."
+                         {:type :execution-error
+                          :subtype :send-before-negotiation-complete
+                          :state @*state}))
+      :ready (send* this data compress *peer-fragment-size sender)
+      :msg-in-flight (send* this data compress *peer-fragment-size sender)
+      :shutdown (throw (ex-info "Attempt to send on a closed connection."
+                                {:type :execution-error
+                                 :subtype :send-after-close
+                                 :state @*state}))))
 
   (send-ping [this]
     (sender ping-control-code))
@@ -99,10 +110,9 @@
     (close this 1000 "Explicit close"))
 
   (close [this code reason]
-    (reset! *state :shutdown)
-    (when-let [on-close @*on-close]
-      (on-close this code reason))
-    (closer))
+    (when-not (= :shutdown @*state)
+      (reset! *state :shutdown)
+      (closer)))
 
   (handle-data [this data]
     (case @*state
@@ -168,7 +178,11 @@
                   whole)]
         #?(:clj (.reset ^ByteArrayOutputStream output-stream)
            :cljs (reset! output-stream []))
-        (@*on-rcv this msg)))))
+        (@*on-rcv this msg))))
+
+  (on-disconnect* [this code reason]
+    (when-let [on-disconnect @*on-disconnect]
+      (on-disconnect this code reason))))
 
 (defn make-connection
   ([conn-id uri remote-addr on-connect sender closer fragment-size
@@ -186,7 +200,7 @@
                     :deflate #(vector 1 (ba/deflate %)))
          output-stream #?(:clj (ByteArrayOutputStream.)
                           :cljs (atom []))
-         *on-close (atom nil)
+         *on-disconnect (atom nil)
          *state (atom :connected)
          *peer-fragment-size (atom nil)
          *num-fragments-expected (atom nil)
@@ -194,5 +208,6 @@
          *cur-msg-compressed? (atom false)]
      (->Connection conn-id uri remote-addr on-connect sender closer
                    fragment-size compress client? output-stream *on-rcv
-                   *on-close *state *peer-fragment-size *num-fragments-expected
+                   *on-disconnect *state *peer-fragment-size
+                   *num-fragments-expected
                    *num-fragments-rcvd *cur-msg-compressed?))))
