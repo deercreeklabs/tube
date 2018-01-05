@@ -26,6 +26,8 @@
   (set-on-rcv [this on-rcv] "Set the receive handler")
   (set-on-close [this on-close] "Set the close handler")
   (get-conn-id [this] "Return the connection id")
+  (get-uri [this])
+  (get-remote-addr [this])
   (get-state [this] "Return the state for this connection")
   (send [this data] "Send binary bytes over this connection")
   (send-ping [this] "Send a tube-specific ping (not an RFC6455 ping)")
@@ -38,8 +40,8 @@
   (handle-msg-in-flight* [this data] "Internal use only"))
 
 (deftype Connection
-    [conn-id on-connect path sender closer fragment-size compress client?
-     output-stream *on-rcv *on-close *state *peer-fragment-size
+    [conn-id uri remote-addr on-connect sender closer fragment-size
+     compress client? output-stream *on-rcv *on-close *state *peer-fragment-size
      *num-fragments-expected *num-fragments-rcvd *cur-msg-compressed?]
   IConnection
   (set-on-rcv [this on-rcv]
@@ -50,6 +52,12 @@
 
   (get-conn-id [this]
     conn-id)
+
+  (get-uri [this]
+    uri)
+
+  (get-remote-addr [this]
+    remote-addr)
 
   (get-state [this]
     @*state)
@@ -117,7 +125,8 @@
                          :data-str (ba/byte-array->debug-str data)
                          :extra-data-str
                          (ba/byte-array->debug-str extra-data)})))
-      (on-connect this conn-id path)))
+      (when on-connect
+        (on-connect this))))
 
   (handle-ready* [this data]
     (let [masked (bit-and (aget #^bytes data 0) 0xf8)
@@ -162,12 +171,12 @@
         (@*on-rcv this msg)))))
 
 (defn make-connection
-  ([conn-id on-connect path sender closer fragment-size compression-type
-    client?]
-   (make-connection conn-id on-connect path sender closer fragment-size
-                    compression-type client? nil))
-  ([conn-id on-connect path sender closer fragment-size compression-type client?
-    on-rcv]
+  ([conn-id uri remote-addr on-connect sender closer fragment-size
+    compression-type client?]
+   (make-connection conn-id uri remote-addr on-connect sender closer
+                    fragment-size compression-type client? nil))
+  ([conn-id uri remote-addr on-connect sender closer fragment-size
+    compression-type client? on-rcv]
    (let [on-rcv (or on-rcv (constantly nil))
          *on-rcv (atom on-rcv)
          compress (case compression-type
@@ -183,7 +192,7 @@
          *num-fragments-expected (atom nil)
          *num-fragments-rcvd (atom 0)
          *cur-msg-compressed? (atom false)]
-     (->Connection conn-id on-connect path sender closer fragment-size compress
-                   client? output-stream *on-rcv *on-close *state
-                   *peer-fragment-size *num-fragments-expected
+     (->Connection conn-id uri remote-addr on-connect sender closer
+                   fragment-size compress client? output-stream *on-rcv
+                   *on-close *state *peer-fragment-size *num-fragments-expected
                    *num-fragments-rcvd *cur-msg-compressed?))))

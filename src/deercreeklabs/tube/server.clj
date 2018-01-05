@@ -45,20 +45,15 @@
             fragment-size 65000 ;; TODO: Figure out this size
             conn-id (swap! *conn-id #(inc (int %)))
             _ (swap! *conn-count #(inc (int %)))
-            _ (debugf "Opened conn %s on %s from %s. Conn count: %d"
-                      conn-id uri remote-addr @*conn-count)
             sender (fn [data]
                      (http/send! channel data))
             closer #(http/close channel)
             conn (connection/make-connection
-                  conn-id on-connect uri sender closer fragment-size
+                  conn-id uri remote-addr on-connect sender closer fragment-size
                   compression-type false)
             on-close  (fn [reason]
                         (swap! *conn-count #(dec (int %)))
-                        (debugf (str "Closed conn %s on %s from %s. "
-                                     "Conn count: %s")
-                                conn-id uri remote-addr @*conn-count)
-                        (on-disconnect conn-id 1000 reason))
+                        (on-disconnect conn 1000 reason))
             on-rcv (fn [data]
                      (connection/handle-data conn data))]
         (http/on-receive channel on-rcv)
@@ -123,16 +118,31 @@
                           {:status 200
                            :headers {"content-type" "text/plain"}
                            :body "Yo"}))
-         on-connect (fn [conn conn-id path]
-                      (let [on-rcv (fn [conn data]
+         *server (atom nil)
+         on-connect (fn [conn]
+                      (let [conn-id (connection/get-conn-id conn)
+                            uri (connection/get-uri conn)
+                            remote-addr (connection/get-remote-addr conn)
+                            conn-count (get-conn-count @*server)
+                            on-rcv (fn [conn data]
                                      (connection/send
                                       conn (ba/reverse-byte-array data)))]
+                        (infof "Opened conn %s on %s from %s. Conn count: %s"
+                               conn-id uri remote-addr conn-count)
                         (connection/set-on-rcv conn on-rcv)))
-         on-disconnect (fn [conn-id code reason])
+         on-disconnect (fn [conn code reason]
+                         (let [conn-id (connection/get-conn-id conn)
+                               uri (connection/get-uri conn)
+                               remote-addr (connection/get-remote-addr conn)
+                               conn-count (get-conn-count @*server)]
+                           (infof (str "Closed conn %s on %s from %s. "
+                                       "Conn count: %s")
+                                 conn-id uri remote-addr conn-count)))
          compression-type :smart
          opts (u/sym-map <handle-http)
          server (make-tube-server port on-connect on-disconnect
                                   compression-type opts)]
+     (reset! *server server)
      (start server))))
 
 

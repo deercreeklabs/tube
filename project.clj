@@ -78,8 +78,7 @@
                           [source-map-support "0.4.17"]]}
 
   :dependencies
-  [[aleph "0.4.4"]
-   [cljsjs/nodejs-externs "1.0.4-1"]
+  [[cljsjs/nodejs-externs "1.0.4-1"]
    [cljsjs/pako "0.2.7-0"]
    [clj-time "0.14.2"]
    [com.andrewmcveigh/cljs-time "0.5.2"]
@@ -94,7 +93,8 @@
    [org.clojure/clojurescript "1.9.946"]
    [org.clojure/core.async "0.3.465"]
    [prismatic/schema "1.1.7"]
-   [primitive-math "0.1.6"]]
+   [primitive-math "0.1.6"]
+   [stylefruits/gniazdo "1.0.1"]]
 
   :test-selectors {:default (constantly true)
                    :the-one :the-one

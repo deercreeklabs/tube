@@ -1,14 +1,15 @@
 (ns deercreeklabs.tube-test
   (:require
-   #?(:clj [aleph.http :as aleph])
    [clojure.core.async :as ca]
    [clojure.test :refer [deftest is use-fixtures]]
    [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
    [deercreeklabs.bytes :as tbs]
-   [deercreeklabs.log-utils :as lu]
+   [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.client :as tube-client]
+   [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
+   [org.httpkit.client :as http]
    [schema.core :as s :include-macros true]
    [schema.test :as st]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]]))
@@ -27,14 +28,15 @@
 
 (defn <send-ws-msg-and-return-rsp
   ([msg timeout]
-   (<send-ws-msg-and-return-rsp msg timeout 25))
-  ([msg timeout keep-alive-secs]
+   (<send-ws-msg-and-return-rsp msg timeout (constantly nil)))
+  ([msg timeout on-disconnect]
    (ca/go
      (let [uri (str "ws://localhost:" port)
            client-rcv-ch (ca/chan)
            options {:on-rcv (fn [conn data]
                               (ca/put! client-rcv-ch data))
-                    :keep-alive-secs keep-alive-secs}
+                    :on-disconnect on-disconnect
+                    :keep-alive-secs 25}
            client (au/<? (tube-client/<make-tube-client uri 1000 options))
            _ (is (not= nil client))
            _ (tube-client/send client msg)
@@ -74,6 +76,20 @@
        (is (= msg-size rsp-size))
        (is (ba/equivalent-byte-arrays? m100 r100))))))
 
+(deftest test-on-disconnect
+  (au/test-async
+   30000
+   (ca/go
+     (let [disconnect-ch (ca/chan)
+           on-disconnect (fn [conn code reason]
+                        (ca/put! disconnect-ch true))
+           msg (ba/byte-array [72 101 108 108 111 32 119 111 114 108 100 33])
+           rsp (au/<? (<send-ws-msg-and-return-rsp msg 25000 on-disconnect))
+           _ (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))
+           [ret ch] (ca/alts! [disconnect-ch (ca/timeout 5000)])]
+       (is (= disconnect-ch ch))
+       (is (= true ret))))))
+
 (deftest test-encode-decode
   (let [data [[0 [0]]
               [-1 [1]]
@@ -101,7 +117,8 @@
 
 ;; TODO: Make this work in cljs
 #?(:clj
-   (deftest ^:the-one test-http-handler
-     (let [ret @(aleph/get "http://localhost:8080")
-           body (-> ret :body slurp)]
-       (is (= "Yo" body)))))
+   (deftest test-http-handler
+     (let [ret @(http/get "http://localhost:8080")]
+       (is (= "Yo" (:body ret))))))
+
+;; TODO: test on-disconnect

@@ -1,15 +1,13 @@
 (ns deercreeklabs.tube.client
   (:refer-clojure :exclude [send])
   (:require
-   #?(:clj [aleph.http :as aleph])
    [clojure.core.async :as ca]
    [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
    [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
-   #?(:clj [manifold.deferred :as d])
-   #?(:clj [manifold.stream :as s])
+   #?(:clj [gniazdo.core :as ws])
    #?(:cljs [goog.object])
    [taoensso.timbre :as timbre
     #?(:clj :refer :cljs :refer-macros) [debugf errorf infof]])
@@ -49,42 +47,35 @@
 #?(:clj
    (defn <make-ws-client-clj
      [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
-     (au/go
-       (let [fragment-size 65535
-             opts {:max-frame-payload fragment-size
-                   :max-frame-size fragment-size}
-             socket-deferred (aleph/websocket-client uri opts)
-             closer (fn []
-                      (try
-                        (-> (d/let-flow [socket socket-deferred]
-                              (s/close! @socket))
-                            (d/catch ;; ignore if socket didn't open
-                                (constantly nil)))
-                        (catch Exception e
-                          (errorf "Unexpected error in ws-client closer.")
-                          (lu/log-exception e))))
-             sender (fn [data]
-                      (let [ret (s/put! @socket-deferred data)]
-                        (d/on-realized
-                         ret
-                         (fn [x]
-                           (when-not x
-                             (on-error (str "Send to " uri " failed."))))
-                         (fn [x]
-                           (on-error (str "Send to " uri
-                                          " failed. Error: " x))))))]
-         (d/on-realized socket-deferred
-                        (fn [stream]
-                          (s/consume #(@*handle-rcv %) stream)
-                          (s/on-closed stream #(@*close-client
-                                                1000 :stream-closed))
-                          (ca/put! connected-ch true))
-                        (fn [err]
-                          (when log-conn-failure?
-                            (debugf "Websocket failed to connect. Error: %s"
-                                    err))
-                          (ca/put! connected-ch false)))
-         (u/sym-map sender closer fragment-size)))))
+     (ca/go
+       (try
+         (let [fragment-size 31999
+               on-bin (fn [bs offset length]
+                        (let [data (ba/slice-byte-array
+                                    bs offset (+ (int offset) (int length)))]
+                          (@*handle-rcv data)))
+               socket (ws/connect
+                       uri
+                       :on-close (fn [code reason]
+                                   (@*close-client code reason))
+                       :on-error on-error
+                       :on-binary on-bin
+                       :on-connect (fn [session]
+                                     (ca/put! connected-ch true)))
+               closer #(ws/close socket)
+               sender (fn [data]
+                        (try
+                          ;; Send-msg mutates binary data, so we make a copy
+                          (ws/send-msg socket (ba/slice-byte-array data))
+                          (catch Exception e
+                            (on-error
+                             (lu/get-exception-msg-and-stacktrace e)))))]
+           (u/sym-map sender closer fragment-size))
+         (catch Exception e
+           (when log-conn-failure?
+             (debugf "Websocket failed to connect. Error: %s" e))
+           (ca/put! connected-ch false)
+           nil)))))
 
 #?(:cljs
    (defn <make-ws-client-node
@@ -194,15 +185,17 @@
           wsc (au/<? (<make-ws-client uri connected-ch on-error *handle-rcv
                                       *close-client log-conn-failure?))
           {:keys [sender closer fragment-size]} wsc
+          on-connect (fn [conn]
+                       (ca/put! ready-ch true))
+          conn-id 0 ;; There is only one
+          conn (connection/make-connection
+                conn-id uri uri on-connect sender closer nil compression-type
+                true on-rcv)
           close-client (fn [code reason]
                          (reset! *shutdown? true)
                          (when closer
                            (closer))
-                         (on-disconnect code reason))
-          on-connect (fn [conn conn-id path]
-                       (ca/put! ready-ch true))
-          conn (connection/make-connection uri on-connect uri sender closer nil
-                                           compression-type true on-rcv)
+                         (on-disconnect conn code reason))
           _ (reset! *handle-rcv #(connection/handle-data conn %))
           _ (reset! *close-client close-client)
           [connected? ch] (ca/alts! [connected-ch
@@ -213,7 +206,8 @@
           (when log-conn-failure?
             (errorf "Websocket to %s failed to connect before timeout (%s ms)"
                     uri connect-timeout-ms))
-          (closer)
+          (when closer
+            (closer))
           nil)
         (do
           (sender (ba/encode-int fragment-size))
@@ -225,8 +219,7 @@
                 (let [[ready? ch] (ca/alts! [ready-ch (ca/timeout 100)])]
                   (cond
                     (= ready-ch ch)
-                    (do
-                      (debugf "Websocket to %s is ready." uri)
+                    (when-not @*shutdown?
                       (start-keep-alive-loop conn keep-alive-secs *shutdown?)
                       (->TubeClient conn *shutdown?))
 
