@@ -158,33 +158,19 @@
                            :browser <make-ws-client-browser))]
     (apply factory args)))
 
-(defn <make-tube-client [uri connect-timeout-ms options]
-  "Will return a connected client or a closed channel (nil) on connection
-   failure or timeout."
+(defn <connect [wsc uri options *handle-rcv *close-client connected-ch]
   (au/go
-    (let [{:keys [compression-type keep-alive-secs on-disconnect on-rcv
-                  log-conn-failure?]
+    (let [{:keys [sender closer fragment-size]} wsc
+          {:keys [compression-type keep-alive-secs on-disconnect on-rcv
+                  log-conn-failure? connect-timeout-ms]
            :or {compression-type :smart
                 keep-alive-secs default-keepalive-secs
                 on-disconnect (constantly nil)
                 on-rcv (constantly nil)
-                log-conn-failure? true}} options
-          *handle-rcv (atom nil)
-          *close-client (atom nil)
+                log-conn-failure? true
+                connect-timeout-ms 5000}} options
           *shutdown? (atom false)
-          connected-ch (ca/chan)
           ready-ch (ca/chan)
-          on-error (fn [msg]
-                     (try
-                       (errorf "Error in websocket: %s" msg)
-                       (when-let [close-client @*close-client]
-                         (close-client 1011 msg))
-                       (catch #?(:clj Exception :cljs js/Error) e
-                         (errorf "Unexpected error in on-error.")
-                         (lu/log-exception e))))
-          wsc (au/<? (<make-ws-client uri connected-ch on-error *handle-rcv
-                                      *close-client log-conn-failure?))
-          {:keys [sender closer fragment-size]} wsc
           on-connect (fn [conn]
                        (ca/put! ready-ch true))
           conn-id 0 ;; There is only one
@@ -193,8 +179,7 @@
                 true on-rcv)
           close-client (fn [code reason]
                          (reset! *shutdown? true)
-                         (when closer
-                           (closer))
+                         (connection/close conn code reason)
                          (on-disconnect conn code reason))
           _ (reset! *handle-rcv #(connection/handle-data conn %))
           _ (reset! *close-client close-client)
@@ -206,8 +191,7 @@
           (when log-conn-failure?
             (errorf "Websocket to %s failed to connect before timeout (%s ms)"
                     uri connect-timeout-ms))
-          (when closer
-            (closer))
+          (connection/close conn 1000 "Failure to connect before timeout")
           nil)
         (do
           (sender (ba/encode-int fragment-size))
@@ -230,9 +214,32 @@
                        (str "Websocket to %s connected, but did not complete "
                             "negotiation before timeout (%s ms)")
                        uri connect-timeout-ms)
-                      (closer)
+                      (connection/close conn 1002
+                                        "Protocol negotiation timed out")
                       nil)
 
                     :else
                     ;; Wait for the protocol negotiation to happen
                     (recur)))))))))))
+
+(defn <make-tube-client [uri connect-timeout-ms options]
+  "Will return a connected client or a closed channel (nil) on connection
+   failure or timeout."
+  (au/go
+    (let [*handle-rcv (atom nil)
+          *close-client (atom nil)
+          connected-ch (ca/chan)
+          on-error (fn [msg]
+                     (try
+                       (errorf "Error in websocket: %s" msg)
+                       (when-let [close-client @*close-client]
+                         (close-client 1011 msg))
+                       (catch #?(:clj Exception :cljs js/Error) e
+                         (errorf "Unexpected error in on-error.")
+                         (lu/log-exception e))))
+          wsc (au/<? (<make-ws-client
+                      uri connected-ch on-error *handle-rcv
+                      *close-client (:log-conn-failure? options)))]
+      (when wsc
+        (au/<? (<connect wsc uri options *handle-rcv *close-client
+                         connected-ch))))))
