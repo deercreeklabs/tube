@@ -189,9 +189,8 @@
                    connected?)
         (do
           (when log-conn-failure?
-            (errorf "Websocket to %s failed to connect before timeout (%s ms)"
-                    uri connect-timeout-ms))
-          (connection/close conn 1000 "Failure to connect before timeout")
+            (errorf "Websocket to %s failed to connect." uri))
+          (connection/close conn 1000 "Failure to connect")
           nil)
         (do
           (sender (ba/encode-int fragment-size))
