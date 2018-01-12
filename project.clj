@@ -39,7 +39,7 @@
              :compiler compiler}
       node-test? (assoc :notify-command ["node" output-to]))))
 
-(defproject deercreeklabs/tube "0.1.24-SNAPSHOT"
+(defproject deercreeklabs/tube "0.1.24"
   :description "Clojure/Clojurescript websocket client and server library."
   :url "http://www.deercreeklabs.com"
   :license {:name "Apache License, Version 2.0"
@@ -85,7 +85,7 @@
    [com.fzakaria/slf4j-timbre "0.3.8"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
-   [deercreeklabs/async-utils "0.1.7"]
+   [deercreeklabs/async-utils "0.1.8"]
    [deercreeklabs/baracus "0.1.2"]
    [deercreeklabs/log-utils "0.1.3"]
    [http-kit "2.3.0-alpha4"]
