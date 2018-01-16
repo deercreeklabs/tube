@@ -95,10 +95,7 @@
                           :state @*state}))
       :ready (send* this data compress *peer-fragment-size sender)
       :msg-in-flight (send* this data compress *peer-fragment-size sender)
-      :shutdown (throw (ex-info "Attempt to send on a closed connection."
-                                {:type :execution-error
-                                 :subtype :send-after-close
-                                 :state @*state}))))
+      :shutdown nil))
 
   (send-ping [this]
     (sender ping-control-code))
