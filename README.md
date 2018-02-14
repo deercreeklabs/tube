@@ -17,7 +17,7 @@ Features:
 
 ## License
 
-Copyright (c) 2017 Deer Creek Labs, LLC
+Copyright (c) 2017-2018 Deer Creek Labs, LLC
 Some portions Copyright (c) 2015-2016 FarBetter, Inc.
 
 

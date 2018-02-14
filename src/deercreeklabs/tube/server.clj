@@ -122,23 +122,23 @@
          *server (atom nil)
          on-connect (fn [conn]
                       (let [conn-id (connection/get-conn-id conn)
-                            uri (connection/get-uri conn)
+                            url (connection/get-url conn)
                             remote-addr (connection/get-remote-addr conn)
                             conn-count (get-conn-count @*server)
                             on-rcv (fn [conn data]
                                      (connection/send
                                       conn (ba/reverse-byte-array data)))]
                         (infof "Opened conn %s on %s from %s. Conn count: %s"
-                               conn-id uri remote-addr conn-count)
+                               conn-id url remote-addr conn-count)
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn code reason]
                          (let [conn-id (connection/get-conn-id conn)
-                               uri (connection/get-uri conn)
+                               url (connection/get-url conn)
                                remote-addr (connection/get-remote-addr conn)
                                conn-count (get-conn-count @*server)]
                            (infof (str "Closed conn %s on %s from %s. "
                                        "Conn count: %s")
-                                 conn-id uri remote-addr conn-count)))
+                                 conn-id url remote-addr conn-count)))
          compression-type :smart
          opts (u/sym-map <handle-http)
          server (make-tube-server port on-connect on-disconnect

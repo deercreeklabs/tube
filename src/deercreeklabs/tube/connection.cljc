@@ -26,7 +26,7 @@
   (set-on-rcv [this on-rcv] "Set the receive handler")
   (set-on-disconnect [this on-disconnect])
   (get-conn-id [this] "Return the connection id")
-  (get-uri [this])
+  (get-url [this])
   (get-remote-addr [this])
   (get-state [this] "Return the state for this connection")
   (send [this data] "Send binary bytes over this connection")
@@ -63,7 +63,7 @@
       (sender frag))))
 
 (deftype Connection
-    [conn-id uri remote-addr on-connect sender closer fragment-size
+    [conn-id url remote-addr on-connect sender closer fragment-size
      compress client? output-stream *on-rcv *on-disconnect *state
      *peer-fragment-size *num-fragments-expected *num-fragments-rcvd
      *cur-msg-compressed?]
@@ -77,8 +77,8 @@
   (get-conn-id [this]
     conn-id)
 
-  (get-uri [this]
-    uri)
+  (get-url [this]
+    url)
 
   (get-remote-addr [this]
     remote-addr)
@@ -182,11 +182,11 @@
       (on-disconnect this code reason))))
 
 (defn make-connection
-  ([conn-id uri remote-addr on-connect sender closer fragment-size
+  ([conn-id url remote-addr on-connect sender closer fragment-size
     compression-type client?]
-   (make-connection conn-id uri remote-addr on-connect sender closer
+   (make-connection conn-id url remote-addr on-connect sender closer
                     fragment-size compression-type client? nil))
-  ([conn-id uri remote-addr on-connect sender closer fragment-size
+  ([conn-id url remote-addr on-connect sender closer fragment-size
     compression-type client? on-rcv]
    (let [on-rcv (or on-rcv (constantly nil))
          *on-rcv (atom on-rcv)
@@ -203,7 +203,7 @@
          *num-fragments-expected (atom nil)
          *num-fragments-rcvd (atom 0)
          *cur-msg-compressed? (atom false)]
-     (->Connection conn-id uri remote-addr on-connect sender closer
+     (->Connection conn-id url remote-addr on-connect sender closer
                    fragment-size compress client? output-stream *on-rcv
                    *on-disconnect *state *peer-fragment-size
                    *num-fragments-expected

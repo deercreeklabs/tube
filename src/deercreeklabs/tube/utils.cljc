@@ -20,7 +20,7 @@
       (java.util.zip DeflaterOutputStream InflaterOutputStream))
      :cljs
      (:require-macros
-      deercreeklabs.tube.utils)))
+      [deercreeklabs.tube.utils :refer [sym-map]])))
 
 #?(:cljs
    (set! *warn-on-infer* true))

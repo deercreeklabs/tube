@@ -46,7 +46,7 @@
 
 #?(:clj
    (defn <make-ws-client-clj
-     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
+     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (ca/go
        (try
          (let [fragment-size 31999
@@ -55,7 +55,7 @@
                                     bs offset (+ (int offset) (int length)))]
                           (@*handle-rcv data)))
                socket (ws/connect
-                       uri
+                       url
                        :on-close (fn [code reason]
                                    (@*close-client code reason))
                        :on-error on-error
@@ -79,7 +79,7 @@
 
 #?(:cljs
    (defn <make-ws-client-node
-     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
+     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (au/go
        (let [fragment-size 32000
              WSC (goog.object.get (js/require "websocket") "client")
@@ -109,15 +109,15 @@
                           err))
                 (ca/put! connected-ch false)))
          (.on client "connect" conn-handler)
-         (.connect ^js/WebSocketClient client uri)
+         (.connect ^js/WebSocketClient client url)
          (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
    (defn <make-ws-client-browser
-     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
+     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (au/go
        (let [fragment-size 32000
-             client (js/WebSocket. uri)
+             client (js/WebSocket. url)
              *connected? (atom false)
              msg-handler (fn [msg-obj]
                            (let [data (js/Int8Array. (.-data msg-obj))]
@@ -146,9 +146,23 @@
 
 #?(:cljs
    (defn <make-ws-client-jsc-ios
-     [uri connected-ch on-error *handle-rcv *close-client log-conn-failure?]
-     ;; TODO: Implement jsc-ios
-     ))
+     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
+     (au/go
+       (let [fragment-size 32000
+             on-connect #(ca/put! connected-ch true)
+             on-disconnect #(@*close-client 1000 "Client close")
+             on-rcv* (fn [data]
+                       (let [size (.-length data)
+                             xfed (js/Int8Array. size)]
+                         (.set xfed data)
+                         (@*handle-rcv xfed)))
+             ws (.makeWithURLOnConnectOnCloseOnErrorOnReceive
+                               js/FarWebSocket url on-connect on-disconnect
+                               on-error on-rcv*)
+             closer #(.close ws)
+             sender (fn [data]
+                      (.send ws (.from js/Array data)))]
+         (u/sym-map sender closer fragment-size)))))
 
 (defn <make-ws-client [& args]
   (let [factory #?(:clj <make-ws-client-clj
@@ -158,7 +172,7 @@
                            :browser <make-ws-client-browser))]
     (apply factory args)))
 
-(defn <connect [wsc uri options *handle-rcv *close-client connected-ch]
+(defn <connect [wsc url options *handle-rcv *close-client connected-ch]
   (au/go
     (let [{:keys [sender closer fragment-size]} wsc
           {:keys [compression-type keep-alive-secs on-disconnect on-rcv
@@ -175,7 +189,7 @@
                        (ca/put! ready-ch true))
           conn-id 0 ;; There is only one
           conn (connection/make-connection
-                conn-id uri uri on-connect sender closer nil compression-type
+                conn-id url url on-connect sender closer nil compression-type
                 true on-rcv)
           close-client (fn [code reason]
                          (reset! *shutdown? true)
@@ -189,7 +203,7 @@
                    connected?)
         (do
           (when log-conn-failure?
-            (errorf "Websocket to %s failed to connect." uri))
+            (errorf "Websocket to %s failed to connect." url))
           (connection/close conn 1000 "Failure to connect")
           nil)
         (do
@@ -212,7 +226,7 @@
                       (errorf
                        (str "Websocket to %s connected, but did not complete "
                             "negotiation before timeout (%s ms)")
-                       uri connect-timeout-ms)
+                       url connect-timeout-ms)
                       (connection/close conn 1002
                                         "Protocol negotiation timed out")
                       nil)
@@ -221,7 +235,7 @@
                     ;; Wait for the protocol negotiation to happen
                     (recur)))))))))))
 
-(defn <make-tube-client [uri connect-timeout-ms options]
+(defn <make-tube-client [url connect-timeout-ms options]
   "Will return a connected client or a closed channel (nil) on connection
    failure or timeout."
   (au/go
@@ -237,8 +251,8 @@
                          (errorf "Unexpected error in on-error.")
                          (lu/log-exception e))))
           wsc (au/<? (<make-ws-client
-                      uri connected-ch on-error *handle-rcv
+                      url connected-ch on-error *handle-rcv
                       *close-client (:log-conn-failure? options)))]
       (when wsc
-        (au/<? (<connect wsc uri options *handle-rcv *close-client
+        (au/<? (<connect wsc url options *handle-rcv *close-client
                          connected-ch))))))
