@@ -63,43 +63,46 @@
         (errorf "Unexpected exception in handle-ws")
         (lu/log-exception e)))))
 
-(defn make-http-handler [<handle-http http-timeout-ms]
+(defn make-http-handler [handle-http http-timeout-ms]
   (fn [req channel]
     (au/go
       (try
-        (let [ret-ch (<handle-http (update req :body #(if %
-                                                        (slurp %)
-                                                        "")))
-              timeout-ch (ca/timeout (or http-timeout-ms 1000))
-              [ret ch] (au/alts? [ret-ch timeout-ch])]
+        (let [ret (handle-http (update req :body #(if % (slurp %) "")))
+              rsp (if-not (au/channel? ret)
+                    ret
+                    (let [timeout-ch (ca/timeout (or http-timeout-ms 1000))
+                          [ch-ret ch] (au/alts? [ret timeout-ch])]
+                      (if (= timeout-ch ch)
+                        {:status 504 :body ""}
+                        ch-ret)))]
           (http/send! channel (cond
-                                (map? ret) ret
-                                (string? ret) {:status 200 :body ret}
-                                (= timeout-ch ch) {:status 504 :body ""}
+                                (map? rsp) rsp
+                                (string? rsp) {:status 200 :body rsp}
                                 :else {:status 500 :body "Bad response"})))
         (catch Exception e
-          (errorf "Unexpected exception in http-handler.")
-          (lu/log-exception e))))))
+          (let [msg "Unexpected exception in HTTP handler."]
+            (errorf msg)
+            (lu/log-exception e)
+            (http/send! channel {:status 500 :body msg})))))))
 
-(defn <handle-http-test [req]
-  (au/go
-    (let [{:keys [body]} req]
-      (clojure.string/upper-case (slurp body)))))
+(defn handle-http-test [req]
+  (let [{:keys [body]} req]
+    (clojure.string/upper-case (slurp body))))
 
 (defn make-tube-server
   ([port on-connect on-disconnect compression-type]
    (make-tube-server port on-connect on-disconnect compression-type {}))
   ([port on-connect on-disconnect compression-type opts]
-   (let [{:keys [<handle-http
+   (let [{:keys [handle-http
                  http-timeout-ms]} opts
          *conn-count (atom 0)
          *stopper (atom nil)
          *conn-id (atom 0)
          ws-handler (make-ws-handler on-connect on-disconnect compression-type
                                      *conn-count *conn-id)
-         http-handler (if <handle-http
-                        (make-http-handler <handle-http http-timeout-ms)
-                        (make-http-handler <handle-http-test 1000))
+         http-handler (if handle-http
+                        (make-http-handler handle-http http-timeout-ms)
+                        (make-http-handler handle-http-test 1000))
          handler (fn [req]
                    (http/with-channel req channel
                      (if (http/websocket? channel)
@@ -114,11 +117,10 @@
   ([] (run-test-server 8080))
   ([port]
    (u/configure-logging)
-   (let [<handle-http (fn [req]
-                        (au/go
-                          {:status 200
-                           :headers {"content-type" "text/plain"}
-                           :body "Yo"}))
+   (let [handle-http (fn [req]
+                       {:status 200
+                        :headers {"content-type" "text/plain"}
+                        :body "Yo"})
          *server (atom nil)
          on-connect (fn [conn]
                       (let [conn-id (connection/get-conn-id conn)
@@ -140,7 +142,7 @@
                                        "Conn count: %s")
                                  conn-id uri remote-addr conn-count)))
          compression-type :smart
-         opts (u/sym-map <handle-http)
+         opts (u/sym-map handle-http)
          server (make-tube-server port on-connect on-disconnect
                                   compression-type opts)]
      (reset! *server server)
