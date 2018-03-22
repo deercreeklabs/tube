@@ -87,7 +87,9 @@
 
 (defn handle-http-test [req]
   (let [{:keys [body]} req]
-    (clojure.string/upper-case (slurp body))))
+    (if (pos? (count body))
+      (clojure.string/upper-case (slurp body))
+      "")))
 
 (defn make-tube-server
   ([port on-connect on-disconnect compression-type]
