@@ -74,7 +74,6 @@
        (catch :default e
          false))))
 
-;; TODO: Return which browser (e.g. chrome, safari, etc.)
 (s/defn get-platform-kw :- s/Keyword
   []
   (cond

@@ -32,7 +32,7 @@
   (send [this data] "Send binary bytes over this connection")
   (send-ping [this] "Send a tube-specific ping (not an RFC6455 ping)")
   (send-pong [this] "Send a tube-specific pong (not an RFC6455 pong)")
-  (close [this] [this code reason] "Close this connection")
+  (close [this] [this code reason ws-already-closed?] "Close this connection")
   (handle-data [this data] "The network layer calls this on receipt of data")
   (handle-connected* [this data] "Internal use only")
   (handle-ready* [this data] "Internal use only")
@@ -104,12 +104,13 @@
     (sender pong-control-code))
 
   (close [this]
-    (close this 1000 "Explicit close"))
+    (close this 1000 "Explicit close" false))
 
-  (close [this code reason]
+  (close [this code reason ws-already-closed?]
     (when-not (= :shutdown @*state)
       (reset! *state :shutdown)
-      (closer)))
+      (when-not ws-already-closed?
+        (closer))))
 
   (handle-data [this data]
     (case @*state

@@ -57,7 +57,7 @@
                socket (ws/connect
                        url
                        :on-close (fn [code reason]
-                                   (@*close-client code reason))
+                                   (@*close-client code reason true))
                        :on-error on-error
                        :on-binary on-bin
                        :on-connect (fn [session]
@@ -97,7 +97,8 @@
                                   (js/Buffer. data)))
              conn-handler (fn [^js/WebSocketConnection conn]
                             (.on conn "close" (fn [code reason]
-                                                (@*close-client code reason)))
+                                                (@*close-client
+                                                 code reason true)))
                             (.on conn "error" on-error)
                             (.on conn "message" msg-handler)
                             (reset! *conn conn)
@@ -131,7 +132,7 @@
                                    (ca/put! connected-ch true)))
          (set! (.-onclose client) (fn [event]
                                     (@*close-client (.-code event)
-                                     (.-reason event))))
+                                     (.-reason event) true)))
          (set! (.-onerror client)
                (fn [err]
                  (if @*connected?
@@ -150,7 +151,7 @@
      (au/go
        (let [fragment-size 32000
              on-connect #(ca/put! connected-ch true)
-             on-disconnect #(@*close-client 1000 "Client close")
+             on-disconnect #(@*close-client 1000 "Client close" true)
              on-rcv* (fn [data]
                        (let [size (.-length data)
                              xfed (js/Int8Array. size)]
@@ -191,9 +192,9 @@
           conn (connection/make-connection
                 conn-id url url on-connect sender closer nil compression-type
                 true on-rcv)
-          close-client (fn [code reason]
+          close-client (fn [code reason ws-already-closed?]
                          (reset! *shutdown? true)
-                         (connection/close conn code reason)
+                         (connection/close conn code reason ws-already-closed?)
                          (on-disconnect conn code reason))
           _ (reset! *handle-rcv #(connection/handle-data conn %))
           _ (reset! *close-client close-client)
@@ -204,7 +205,7 @@
         (do
           (when log-conn-failure?
             (errorf "Websocket to %s failed to connect." url))
-          (connection/close conn 1000 "Failure to connect")
+          (connection/close conn 1000 "Failure to connect" false)
           nil)
         (do
           (sender (ba/encode-int fragment-size))
@@ -228,7 +229,7 @@
                             "negotiation before timeout (%s ms)")
                        url connect-timeout-ms)
                       (connection/close conn 1002
-                                        "Protocol negotiation timed out")
+                                        "Protocol negotiation timed out" false)
                       nil)
 
                     :else
@@ -246,7 +247,7 @@
                      (try
                        (errorf "Error in websocket: %s" msg)
                        (when-let [close-client @*close-client]
-                         (close-client 1011 msg))
+                         (close-client 1011 msg true))
                        (catch #?(:clj Exception :cljs js/Error) e
                          (errorf "Unexpected error in on-error.")
                          (lu/log-exception e))))
