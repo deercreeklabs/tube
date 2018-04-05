@@ -121,7 +121,7 @@
 
   (handle-connected* [this data]
     (let [[peer-fragment-size extra-data] (ba/decode-int data)
-      state @*state]
+          state @*state]
       (reset! *peer-fragment-size peer-fragment-size)
       (when-not client?
         (sender (ba/encode-int fragment-size)))

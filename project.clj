@@ -1,5 +1,6 @@
 (def compiler-defaults
-  {:npm-deps {:websocket "1.0.25"}
+  {:npm-deps {:pako "1.0.6"
+              :websocket "1.0.25"}
    :install-deps true
    :parallel-build true
    :static-fns true
@@ -60,7 +61,8 @@
     [[lein-ancient "0.6.15"]
      [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
      [lein-cloverage "1.0.10" :exclusions [org.clojure/clojure]]
-     [lein-doo "0.1.8"]
+     [lein-doo "0.1.10"
+      :exclusions [org.clojure/clojure org.clojure/clojurescript]]
      [lein-npm "0.6.2" :exclusions [com.fasterxml.jackson.core/jackson-core]]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
@@ -79,20 +81,19 @@
 
   :dependencies
   [[cljsjs/nodejs-externs "1.0.4-1"]
-   [cljsjs/pako "0.2.7-0"]
    [clj-time "0.14.2"]
    [com.andrewmcveigh/cljs-time "0.5.2"]
    [com.fzakaria/slf4j-timbre "0.3.8"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
-   [deercreeklabs/async-utils "0.1.8"]
-   [deercreeklabs/baracus "0.1.3"]
+   [deercreeklabs/async-utils "0.1.9"]
+   [deercreeklabs/baracus "0.1.4"]
    [deercreeklabs/log-utils "0.1.3"]
    [http-kit "2.3.0-alpha4"]
    [org.clojure/clojure "1.9.0"]
-   [org.clojure/clojurescript "1.9.946"]
+   [org.clojure/clojurescript "1.10.238"]
    [org.clojure/core.async "0.4.474"]
-   [prismatic/schema "1.1.7"]
+   [prismatic/schema "1.1.9"]
    [primitive-math "0.1.6"]
    [stylefruits/gniazdo "1.0.1"]]
 

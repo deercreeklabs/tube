@@ -9,6 +9,7 @@
    [deercreeklabs.tube.utils :as u]
    #?(:clj [gniazdo.core :as ws])
    #?(:cljs [goog.object])
+   [schema.core :as s]
    [taoensso.timbre :as timbre
     #?(:clj :refer :cljs :refer-macros) [debugf errorf infof]])
   #?(:clj
@@ -22,14 +23,6 @@
    (primitive-math/use-primitive-operators))
 
 (def default-keepalive-secs 25)
-
-(defn start-keep-alive-loop [conn keep-alive-secs *shutdown?]
-  (au/go
-    (while (not @*shutdown?)
-      (ca/<! (ca/timeout (* 1000 (int keep-alive-secs))))
-      ;; check again in case shutdown happened while we were waiting
-      (when-not @*shutdown?
-        (connection/send-ping conn)))))
 
 (defprotocol ITubeClient
   (send [this data] "Send binary bytes over this tube")
@@ -145,33 +138,13 @@
          (set! (.-onmessage client) msg-handler)
          (u/sym-map sender closer fragment-size)))))
 
-#?(:cljs
-   (defn <make-ws-client-jsc-ios
-     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
-     (au/go
-       (let [fragment-size 32000
-             on-connect #(ca/put! connected-ch true)
-             on-disconnect #(@*close-client 1000 "Client close" true)
-             on-rcv* (fn [data]
-                       (let [size (.-length data)
-                             xfed (js/Int8Array. size)]
-                         (.set xfed data)
-                         (@*handle-rcv xfed)))
-             ws (.makeWithURLOnConnectOnCloseOnErrorOnReceive
-                               js/FarWebSocket url on-connect on-disconnect
-                               on-error on-rcv*)
-             closer #(.close ws)
-             sender (fn [data]
-                      (.send ws (.from js/Array data)))]
-         (u/sym-map sender closer fragment-size)))))
-
-(defn <make-ws-client [& args]
-  (let [factory #?(:clj <make-ws-client-clj
-                   :cljs (case (u/get-platform-kw)
-                           :node <make-ws-client-node
-                           :jsc-ios <make-ws-client-jsc-ios
-                           :browser <make-ws-client-browser))]
-    (apply factory args)))
+(defn start-keep-alive-loop [conn keep-alive-secs *shutdown?]
+  (au/go
+    (while (not @*shutdown?)
+      (ca/<! (ca/timeout (* 1000 (int keep-alive-secs))))
+      ;; check again in case shutdown happened while we were waiting
+      (when-not @*shutdown?
+        (connection/send-ping conn)))))
 
 (defn <connect [wsc url options *handle-rcv *close-client connected-ch]
   (au/go
@@ -236,24 +209,46 @@
                     ;; Wait for the protocol negotiation to happen
                     (recur)))))))))))
 
-(defn <make-tube-client [url connect-timeout-ms options]
-  "Will return a connected client or a closed channel (nil) on connection
+(defn <make-ws-client* [& args]
+  (let [factory #?(:clj <make-ws-client-clj
+                   :cljs (case (u/get-platform-kw)
+                           :node <make-ws-client-node
+                           :browser <make-ws-client-browser))]
+    (apply factory args)))
+
+(s/defn <make-tube-client
+  ([url :- s/Str
+    connect-timeout-ms :- s/Int]
+   (<make-tube-client url connect-timeout-ms {}))
+  ([url :- s/Str
+    connect-timeout-ms :- s/Int
+    options :- {(s/optional-key :compression-type) (s/enum :none :smart
+                                                           :deflate)
+                (s/optional-key :keep-alive-secs) s/Int
+                (s/optional-key :on-disconnect) (s/=> s/Any)
+                (s/optional-key :on-rcv) (s/=> s/Any)
+                (s/optional-key :log-conn-failure?) s/Bool
+                (s/optional-key :connect-timeout-ms) s/Int
+                (s/optional-key :<make-ws-client) (s/=> s/Any)}]
+   "Will return a connected client or a closed channel (nil) on connection
    failure or timeout."
-  (au/go
-    (let [*handle-rcv (atom nil)
-          *close-client (atom nil)
-          connected-ch (ca/chan)
-          on-error (fn [msg]
-                     (try
-                       (errorf "Error in websocket: %s" msg)
-                       (when-let [close-client @*close-client]
-                         (close-client 1011 msg true))
-                       (catch #?(:clj Exception :cljs js/Error) e
-                         (errorf "Unexpected error in on-error.")
-                         (lu/log-exception e))))
-          wsc (au/<? (<make-ws-client
-                      url connected-ch on-error *handle-rcv
-                      *close-client (:log-conn-failure? options)))]
-      (when wsc
-        (au/<? (<connect wsc url options *handle-rcv *close-client
-                         connected-ch))))))
+   (au/go
+     (let [*handle-rcv (atom nil)
+           *close-client (atom nil)
+           connected-ch (ca/chan)
+           on-error (fn [msg]
+                      (try
+                        (errorf "Error in websocket: %s" msg)
+                        (when-let [close-client @*close-client]
+                          (close-client 1011 msg true))
+                        (catch #?(:clj Exception :cljs js/Error) e
+                          (errorf "Unexpected error in on-error.")
+                          (lu/log-exception e))))
+           <make-ws-client (or (:<make-ws-client options)
+                               <make-ws-client*)
+           wsc (au/<? (<make-ws-client
+                       url connected-ch on-error *handle-rcv
+                       *close-client (:log-conn-failure? options)))]
+       (when wsc
+         (au/<? (<connect wsc url options *handle-rcv *close-client
+                          connected-ch)))))))

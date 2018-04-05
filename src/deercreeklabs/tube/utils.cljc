@@ -2,7 +2,6 @@
   "Common code and utilities. Parts from https://github.com/farbetter/utils."
   (:refer-clojure :exclude [byte-array send])
   (:require
-   #?(:cljs [cljsjs.pako])
    [#?(:clj clj-time.format :cljs cljs-time.format) :as f]
    [#?(:clj clj-time.core :cljs cljs-time.core) :as t]
    [#?(:clj clojure.core.async.impl.protocols
@@ -65,21 +64,11 @@
   #?(:clj false
      :cljs (boolean (= "nodejs" cljs.core/*target*))))
 
-(s/defn jsc-ios? :- s/Bool
-  []
-  #?(:clj false
-     :cljs
-     (try
-       (boolean (= "jsc-ios" js/JSEnv))
-       (catch :default e
-         false))))
-
 (s/defn get-platform-kw :- s/Keyword
   []
   (cond
     (jvm?) :jvm
     (node?) :node
-    (jsc-ios?) :jsc-ios
     (browser?) :browser
     :else :unknown))
 
