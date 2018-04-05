@@ -68,7 +68,7 @@
      ;; lein-release, we exclude lein-release from lein-ancient.
      [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]
     :dependencies
-    [[doo "0.1.8"]
+    [[doo "0.1.10"]
      [org.clojure/tools.namespace "0.2.11"]]}
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
