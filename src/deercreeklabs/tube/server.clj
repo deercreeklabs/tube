@@ -11,7 +11,8 @@
    [org.httpkit.server :as http]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   (:import
-   (java.nio HeapByteBuffer)))
+   (java.nio HeapByteBuffer)
+   (java.security Security)))
 
 (primitive-math/use-primitive-operators)
 
@@ -91,12 +92,17 @@
       (clojure.string/upper-case (slurp body))
       "")))
 
+;; TODO: Add schema to clarify opts
 (defn make-tube-server
   ([port on-connect on-disconnect compression-type]
    (make-tube-server port on-connect on-disconnect compression-type {}))
   ([port on-connect on-disconnect compression-type opts]
    (let [{:keys [handle-http
-                 http-timeout-ms]} opts
+                 http-timeout-ms
+                 dns-cache-secs]
+          :or {dns-cache-secs 60}} opts
+         _ (Security/setProperty "networkaddress.cache.ttl"
+                                 (str dns-cache-secs))
          *conn-count (atom 0)
          *stopper (atom nil)
          *conn-id (atom 0)
