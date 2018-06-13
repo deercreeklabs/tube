@@ -81,14 +81,14 @@
 
   :dependencies
   [[cljsjs/nodejs-externs "1.0.4-1"]
-   [clj-time "0.14.3"]
+   [clj-time "0.14.4"]
    [com.andrewmcveigh/cljs-time "0.5.2"]
    [com.fzakaria/slf4j-timbre "0.3.8"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
    [deercreeklabs/async-utils "0.1.9"]
-   [deercreeklabs/baracus "0.1.5"]
-   [deercreeklabs/log-utils "0.1.4"]
+   [deercreeklabs/baracus "0.1.6"]
+   [deercreeklabs/log-utils "0.1.5"]
    [http-kit "2.3.0"]
    [org.clojure/clojure "1.9.0"]
    [org.clojure/clojurescript "1.10.238"]
