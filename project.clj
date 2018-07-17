@@ -87,7 +87,7 @@
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
    [deercreeklabs/async-utils "0.1.12"]
-   [deercreeklabs/baracus "0.1.10"]
+   [deercreeklabs/baracus "0.1.11"]
    [deercreeklabs/log-utils "0.1.8"]
    [http-kit "2.3.0"]
    [org.clojure/clojure "1.9.0"]
