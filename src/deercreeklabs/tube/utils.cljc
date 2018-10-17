@@ -64,7 +64,7 @@
   #?(:clj false
      :cljs (boolean (= "nodejs" cljs.core/*target*))))
 
-(s/defn get-platform-kw :- s/Keyword
+(s/defn platform-kw :- s/Keyword
   []
   (cond
     (jvm?) :jvm
@@ -80,7 +80,7 @@
     {:println {:ns-blacklist
                ["org.eclipse.jetty.*"]}}}))
 
-(s/defn get-current-time-ms :- s/Num
+(s/defn current-time-ms :- s/Num
   []
   #?(:clj (System/currentTimeMillis)
      :cljs (.getTime (js/Date.))))

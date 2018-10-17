@@ -38,7 +38,7 @@
     (connection/close conn)))
 
 #?(:clj
-   (defn <make-ws-client-clj
+   (defn <ws-client-clj
      [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (ca/go
        (try
@@ -62,7 +62,7 @@
                           (ws/send-msg socket (ba/slice-byte-array data))
                           (catch Exception e
                             (on-error
-                             (lu/get-exception-msg-and-stacktrace e)))))]
+                             (lu/ex-msg-and-stacktrace e)))))]
            (u/sym-map sender closer fragment-size))
          (catch Exception e
            (when log-conn-failure?
@@ -71,7 +71,7 @@
            nil)))))
 
 #?(:cljs
-   (defn <make-ws-client-node
+   (defn <ws-client-node
      [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (au/go
        (let [fragment-size 32000
@@ -107,7 +107,7 @@
          (u/sym-map sender closer fragment-size)))))
 
 #?(:cljs
-   (defn <make-ws-client-browser
+   (defn <ws-client-browser
      [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
      (au/go
        (let [fragment-size 32000
@@ -162,7 +162,7 @@
           on-connect (fn [conn]
                        (ca/put! ready-ch true))
           conn-id 0 ;; There is only one
-          conn (connection/make-connection
+          conn (connection/connection
                 conn-id url url on-connect sender closer nil compression-type
                 true on-rcv)
           close-client (fn [code reason ws-already-closed?]
@@ -183,7 +183,7 @@
         (do
           (sender (ba/encode-int fragment-size))
           (let [expiry-ms (+ (#?(:clj long :cljs identity) ;; ensure primitive
-                              (u/get-current-time-ms))
+                              (u/current-time-ms))
                              (#?(:clj long :cljs identity) connect-timeout-ms))]
             (loop []
               (when-not @*shutdown?
@@ -194,7 +194,7 @@
                       (start-keep-alive-loop conn keep-alive-secs *shutdown?)
                       (->TubeClient conn *shutdown?))
 
-                    (> (#?(:clj long :cljs identity) (u/get-current-time-ms))
+                    (> (#?(:clj long :cljs identity) (u/current-time-ms))
                        (#?(:clj long :cljs identity) expiry-ms))
                     (do
                       (errorf
@@ -209,17 +209,17 @@
                     ;; Wait for the protocol negotiation to happen
                     (recur)))))))))))
 
-(defn <make-ws-client* [& args]
-  (let [factory #?(:clj <make-ws-client-clj
-                   :cljs (case (u/get-platform-kw)
-                           :node <make-ws-client-node
-                           :browser <make-ws-client-browser))]
+(defn <ws-client* [& args]
+  (let [factory #?(:clj <ws-client-clj
+                   :cljs (case (u/platform-kw)
+                           :node <ws-client-node
+                           :browser <ws-client-browser))]
     (apply factory args)))
 
-(s/defn <make-tube-client
+(s/defn <tube-client
   ([url :- s/Str
     connect-timeout-ms :- s/Int]
-   (<make-tube-client url connect-timeout-ms {}))
+   (<tube-client url connect-timeout-ms {}))
   ([url :- s/Str
     connect-timeout-ms :- s/Int
     options :- {(s/optional-key :compression-type) (s/enum :none :smart
@@ -229,7 +229,7 @@
                 (s/optional-key :on-rcv) (s/=> s/Any)
                 (s/optional-key :log-conn-failure?) s/Bool
                 (s/optional-key :connect-timeout-ms) s/Int
-                (s/optional-key :<make-ws-client) (s/=> s/Any)}]
+                (s/optional-key :<ws-client) (s/=> s/Any)}]
    "Will return a connected client or a closed channel (nil) on connection
    failure or timeout."
    (au/go
@@ -243,10 +243,10 @@
                           (close-client 1011 msg true))
                         (catch #?(:clj Exception :cljs js/Error) e
                           (errorf "Unexpected error in on-error.")
-                          (lu/log-exception e))))
-           <make-ws-client (or (:<make-ws-client options)
-                               <make-ws-client*)
-           wsc (au/<? (<make-ws-client
+                          (lu/log-ex e))))
+           <ws-client (or (:<ws-client options)
+                          <ws-client*)
+           wsc (au/<? (<ws-client
                        url connected-ch on-error *handle-rcv
                        *close-client (:log-conn-failure? options)))]
        (when wsc

@@ -17,10 +17,10 @@
    (primitive-math/use-primitive-operators))
 
 (def max-num-fragments 2147483647) ;; 2^31-1
-(defn make-control-code [x]
+(defn control-code [x]
   (ba/byte-array [(bit-shift-left x 3)]))
-(def ping-control-code (make-control-code 16))
-(def pong-control-code (make-control-code 17))
+(def ping-control-code (control-code 16))
+(def pong-control-code (control-code 17))
 
 (defprotocol IConnection
   (set-on-rcv [this on-rcv] "Set the receive handler")
@@ -182,11 +182,11 @@
     (when-let [on-disconnect @*on-disconnect]
       (on-disconnect this code reason))))
 
-(defn make-connection
+(defn connection
   ([conn-id uri remote-addr on-connect sender closer fragment-size
     compression-type client?]
-   (make-connection conn-id uri remote-addr on-connect sender closer
-                    fragment-size compression-type client? nil))
+   (connection conn-id uri remote-addr on-connect sender closer
+               fragment-size compression-type client? nil))
   ([conn-id uri remote-addr on-connect sender closer fragment-size
     compression-type client? on-rcv]
    (let [on-rcv (or on-rcv (constantly nil))

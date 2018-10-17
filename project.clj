@@ -1,5 +1,6 @@
 (def compiler-defaults
   {:npm-deps {:pako "1.0.6"
+              :source-map-support "0.4.17"
               :websocket "1.0.25"}
    :install-deps true
    :parallel-build true
@@ -40,7 +41,7 @@
              :compiler compiler}
       node-test? (assoc :notify-command ["node" output-to]))))
 
-(defproject deercreeklabs/tube "0.1.33-SNAPSHOT"
+(defproject deercreeklabs/tube "0.2.0-SNAPSHOT"
   :description "Clojure/Clojurescript websocket client and server library."
   :url "http://www.deercreeklabs.com"
   :license {:name "Apache License, Version 2.0"
@@ -60,7 +61,7 @@
     :plugins
     [[lein-ancient "0.6.15"]
      [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
-     [lein-cloverage "1.0.11" :exclusions [fipp org.clojure/clojure]]
+     [lein-cloverage "1.0.13" :exclusions [fipp org.clojure/clojure]]
      [lein-doo "0.1.10"
       :exclusions [org.clojure/clojure org.clojure/clojurescript]]
      [lein-npm "0.6.2" :exclusions [com.fasterxml.jackson.core/jackson-core]]
@@ -76,26 +77,25 @@
   :npm {:devDependencies [[karma "1.7.1"]
                           [karma-chrome-launcher "2.2.0"]
                           [karma-cljs-test "0.1.0"]
-                          [karma-firefox-launcher "1.0.1"]
-                          [source-map-support "0.4.17"]]}
+                          [karma-firefox-launcher "1.0.1"]]}
 
   :dependencies
   [[cljsjs/nodejs-externs "1.0.4-1"]
-   [clj-time "0.14.4"]
+   [clj-time "0.15.0"]
    [com.andrewmcveigh/cljs-time "0.5.2"]
    [com.fzakaria/slf4j-timbre "0.3.12"]
    [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
    [com.taoensso/timbre "4.10.0"]
    [deercreeklabs/async-utils "0.1.12"]
-   [deercreeklabs/baracus "0.1.11"]
-   [deercreeklabs/log-utils "0.1.8"]
+   [deercreeklabs/baracus "0.1.12"]
+   [deercreeklabs/log-utils "0.2.0"]
    [http-kit "2.3.0"]
    [org.clojure/clojure "1.9.0"]
    [org.clojure/clojurescript "1.10.339"]
    [org.clojure/core.async "0.4.474"]
    [prismatic/schema "1.1.9"]
    [primitive-math "0.1.6"]
-   [stylefruits/gniazdo "1.0.1"]]
+   [stylefruits/gniazdo "1.1.0"]]
 
   :test-selectors {:default (constantly true)
                    :the-one :the-one

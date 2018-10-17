@@ -38,7 +38,7 @@
   (get-conn-count [this]
     @*conn-count))
 
-(defn make-ws-handler
+(defn ws-handler
   [on-connect on-disconnect compression-type *conn-count *conn-id]
   (fn handle-ws [req channel]
     (try
@@ -49,7 +49,7 @@
             sender (fn [data]
                      (http/send! channel data))
             closer #(http/close channel)
-            conn (connection/make-connection
+            conn (connection/connection
                   conn-id uri remote-addr on-connect sender closer fragment-size
                   compression-type false)
             on-close  (fn [reason]
@@ -62,9 +62,9 @@
         (http/on-close channel on-close))
       (catch Exception e
         (errorf "Unexpected exception in handle-ws")
-        (lu/log-exception e)))))
+        (lu/log-ex e)))))
 
-(defn make-http-handler [handle-http http-timeout-ms]
+(defn http-handler [handle-http http-timeout-ms]
   (fn [req channel]
     (au/go
       (try
@@ -83,7 +83,7 @@
         (catch Exception e
           (let [msg "Unexpected exception in HTTP handler."]
             (errorf msg)
-            (lu/log-exception e)
+            (lu/log-ex e)
             (http/send! channel {:status 500 :body msg})))))))
 
 (defn handle-http-test [req]
@@ -93,9 +93,9 @@
       "")))
 
 ;; TODO: Add schema to clarify opts
-(defn make-tube-server
+(defn tube-server
   ([port on-connect on-disconnect compression-type]
-   (make-tube-server port on-connect on-disconnect compression-type {}))
+   (tube-server port on-connect on-disconnect compression-type {}))
   ([port on-connect on-disconnect compression-type opts]
    (let [{:keys [handle-http
                  http-timeout-ms
@@ -106,11 +106,11 @@
          *conn-count (atom 0)
          *stopper (atom nil)
          *conn-id (atom 0)
-         ws-handler (make-ws-handler on-connect on-disconnect compression-type
-                                     *conn-count *conn-id)
+         ws-handler (ws-handler on-connect on-disconnect compression-type
+                                *conn-count *conn-id)
          http-handler (if handle-http
-                        (make-http-handler handle-http http-timeout-ms)
-                        (make-http-handler handle-http-test 1000))
+                        (http-handler handle-http http-timeout-ms)
+                        (http-handler handle-http-test 1000))
          handler (fn [req]
                    (http/with-channel req channel
                      (if (http/websocket? channel)
@@ -148,11 +148,11 @@
                                conn-count (get-conn-count @*server)]
                            (infof (str "Closed conn %s on %s from %s. "
                                        "Conn count: %s")
-                                 conn-id uri remote-addr conn-count)))
+                                  conn-id uri remote-addr conn-count)))
          compression-type :smart
          opts (u/sym-map handle-http)
-         server (make-tube-server port on-connect on-disconnect
-                                  compression-type opts)]
+         server (tube-server port on-connect on-disconnect
+                             compression-type opts)]
      (reset! *server server)
      (start server))))
 
