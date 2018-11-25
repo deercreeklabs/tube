@@ -3,12 +3,14 @@
   (:require
    [clojure.core.async :as ca]
    [clojure.java.io :as io]
+   [clojure.string :as string]
    [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
    [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
    [org.httpkit.server :as http]
+   [primitive-math]
    [taoensso.timbre :as timbre :refer [debugf errorf infof]])
   (:import
    (java.nio HeapByteBuffer)
@@ -38,7 +40,7 @@
   (get-conn-count [this]
     @*conn-count))
 
-(defn ws-handler
+(defn make-ws-handler
   [on-connect on-disconnect compression-type *conn-count *conn-id]
   (fn handle-ws [req channel]
     (try
@@ -64,7 +66,7 @@
         (errorf "Unexpected exception in handle-ws")
         (lu/log-ex e)))))
 
-(defn http-handler [handle-http http-timeout-ms]
+(defn make-http-handler [handle-http http-timeout-ms]
   (fn [req channel]
     (au/go
       (try
@@ -77,9 +79,22 @@
                         {:status 504 :body ""}
                         ch-ret)))]
           (http/send! channel (cond
-                                (map? rsp) rsp
-                                (string? rsp) {:status 200 :body rsp}
-                                :else {:status 500 :body "Bad response"})))
+                                (map? rsp)
+                                rsp
+
+                                (string? rsp)
+                                {:status 200
+                                 :headers {"content-type" "text/plain"}
+                                 :body rsp}
+
+                                :else
+                                (let [rsp-class-name (name (class rsp))]
+                                  (throw
+                                   (ex-info
+                                    (str "Bad return type from handle-http. "
+                                         "Must be string or map. Got "
+                                         rsp-class-name)
+                                    (u/sym-map rsp-class-name)))))))
         (catch Exception e
           (let [msg "Unexpected exception in HTTP handler."]
             (errorf msg)
@@ -89,7 +104,7 @@
 (defn handle-http-test [req]
   (let [{:keys [body]} req]
     (if (pos? (count body))
-      (clojure.string/upper-case (slurp body))
+      (string/upper-case (slurp body))
       "")))
 
 ;; TODO: Add schema to clarify opts
@@ -106,16 +121,16 @@
          *conn-count (atom 0)
          *stopper (atom nil)
          *conn-id (atom 0)
-         ws-handler (ws-handler on-connect on-disconnect compression-type
-                                *conn-count *conn-id)
-         http-handler (if handle-http
-                        (http-handler handle-http http-timeout-ms)
-                        (http-handler handle-http-test 1000))
+         handle-ws* (make-ws-handler on-connect on-disconnect compression-type
+                                     *conn-count *conn-id)
+         handle-http* (if handle-http
+                        (make-http-handler handle-http http-timeout-ms)
+                        (make-http-handler handle-http-test 1000))
          handler (fn [req]
                    (http/with-channel req channel
                      (if (http/websocket? channel)
-                       (ws-handler req channel)
-                       (http-handler req channel))))
+                       (handle-ws* req channel)
+                       (handle-http* req channel))))
          starter (fn []
                    (reset! *stopper (http/run-server handler (u/sym-map port)))
                    (infof "Started server on port %s." port))]

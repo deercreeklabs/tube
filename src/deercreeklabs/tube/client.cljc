@@ -9,6 +9,7 @@
    [deercreeklabs.tube.utils :as u]
    #?(:clj [gniazdo.core :as ws])
    #?(:cljs [goog.object])
+   #?(:clj [primitive-math])
    [schema.core :as s]
    [taoensso.timbre :as timbre
     #?(:clj :refer :cljs :refer-macros) [debugf errorf infof]])
@@ -217,6 +218,8 @@
     (apply factory args)))
 
 (s/defn <tube-client
+  "Will return a connected client or a closed channel (nil) on connection
+   failure or timeout."
   ([url :- s/Str
     connect-timeout-ms :- s/Int]
    (<tube-client url connect-timeout-ms {}))
@@ -230,8 +233,6 @@
                 (s/optional-key :log-conn-failure?) s/Bool
                 (s/optional-key :connect-timeout-ms) s/Int
                 (s/optional-key :<ws-client) (s/=> s/Any)}]
-   "Will return a connected client or a closed channel (nil) on connection
-   failure or timeout."
    (au/go
      (let [*handle-rcv (atom nil)
            *close-client (atom nil)
