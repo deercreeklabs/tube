@@ -62,14 +62,14 @@
     [[lein-ancient "0.6.15"]
      [lein-cljsbuild "1.1.7" :exclusions [org.clojure/clojure]]
      [lein-cloverage "1.0.13" :exclusions [fipp org.clojure/clojure]]
-     [lein-doo "0.1.10"
-      :exclusions [org.clojure/clojure org.clojure/clojurescript]]
+     [lein-doo "0.1.11"
+      :exclusions [fipp org.clojure/clojure org.clojure/clojurescript]]
      [lein-npm "0.6.2" :exclusions [com.fasterxml.jackson.core/jackson-core]]
      ;; Because of confusion with a defunct project also called
      ;; lein-release, we exclude lein-release from lein-ancient.
      [lein-release "1.0.9" :upgrade false :exclusions [org.clojure/clojure]]]
     :dependencies
-    [[doo "0.1.10"]
+    [[doo "0.1.11"]
      [org.clojure/tools.namespace "0.2.11"]]}
    :uberjar {:aot :all
              :jvm-opts ^:replace ["-server" "-XX:+AggressiveOpts"]}}
@@ -81,21 +81,21 @@
 
   :dependencies
   [[cljsjs/nodejs-externs "1.0.4-1"]
-   [clj-time "0.15.0"]
+   [clj-time "0.15.1"]
    [com.andrewmcveigh/cljs-time "0.5.2"]
    [com.fzakaria/slf4j-timbre "0.3.12"]
-   [com.google.guava/guava "23.0" :exclusions [com.google.code.findbugs/jsr305]]
+   [com.google.guava/guava "27.0-jre"]
    [com.taoensso/timbre "4.10.0"]
-   [deercreeklabs/async-utils "0.1.12"]
-   [deercreeklabs/baracus "0.1.12"]
-   [deercreeklabs/log-utils "0.2.0"]
+   [deercreeklabs/async-utils "0.1.13"]
+   [deercreeklabs/baracus "0.1.13"]
+   [deercreeklabs/log-utils "0.2.1"]
    [http-kit "2.3.0"]
    [org.clojure/clojure "1.9.0"]
-   [org.clojure/clojurescript "1.10.339"]
-   [org.clojure/core.async "0.4.474"]
+   [org.clojure/clojurescript "1.10.439"]
+   [org.clojure/core.async "0.4.490"]
    [prismatic/schema "1.1.9"]
    [primitive-math "0.1.6"]
-   [stylefruits/gniazdo "1.1.0"]]
+   [stylefruits/gniazdo "1.1.1"]]
 
   :test-selectors {:default (constantly true)
                    :the-one :the-one
