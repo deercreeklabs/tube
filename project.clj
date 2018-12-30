@@ -80,15 +80,10 @@
                           [karma-firefox-launcher "1.0.1"]]}
 
   :dependencies
-  [[cljsjs/nodejs-externs "1.0.4-1"]
-   [clj-time "0.15.1"]
-   [com.andrewmcveigh/cljs-time "0.5.2"]
-   [com.fzakaria/slf4j-timbre "0.3.12"]
-   [com.google.guava/guava "27.0-jre"]
-   [com.taoensso/timbre "4.10.0"]
+  [[clj-time "0.15.1"]
+   [cljsjs/nodejs-externs "1.0.4-1"]
    [deercreeklabs/async-utils "0.1.14"]
    [deercreeklabs/baracus "0.1.14"]
-   [deercreeklabs/log-utils "0.2.4"]
    [http-kit "2.3.0"]
    [org.clojure/clojure "1.10.0"]
    [org.clojure/clojurescript "1.10.439"]

@@ -1,17 +1,17 @@
 (ns deercreeklabs.tube.server
   (:gen-class)
   (:require
+   [clj-time.core :as t]
+   [clj-time.format :as f]
    [clojure.core.async :as ca]
    [clojure.java.io :as io]
    [clojure.string :as string]
    [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
-   [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
    [org.httpkit.server :as http]
-   [primitive-math]
-   [taoensso.timbre :as timbre :refer [debugf errorf infof]])
+   [primitive-math])
   (:import
    (java.nio HeapByteBuffer)
    (java.security Security)))
@@ -23,25 +23,27 @@
   (stop [this] "Stop serving")
   (get-conn-count [this] "Return the number of current connections"))
 
-(deftype TubeServer [*conn-count starter *stopper]
+(deftype TubeServer [logger *conn-count starter *stopper]
   ITubeServer
   (start [this]
     (if @*stopper
-      (infof "Server is already started.")
+      (logger :info "Tube server is already started.")
       (reset! *stopper (starter))))
 
   (stop [this]
     (if-let [stopper @*stopper]
       (do
+        (logger :info "Attempting to stop tube server.")
         (stopper)
-        (reset! *stopper nil))
-      (infof "Server is not running.")))
+        (reset! *stopper nil)
+        (logger :info "Tube server is stopped."))
+      (logger :info "Tube server is not running.")))
 
   (get-conn-count [this]
     @*conn-count))
 
 (defn make-ws-handler
-  [on-connect on-disconnect compression-type *conn-count *conn-id]
+  [logger on-connect on-disconnect compression-type *conn-count *conn-id]
   (fn handle-ws [req channel]
     (try
       (let [{:keys [uri remote-addr]} req
@@ -63,10 +65,10 @@
         (http/on-receive channel on-rcv)
         (http/on-close channel on-close))
       (catch Exception e
-        (errorf "Unexpected exception in handle-ws")
-        (lu/log-ex e)))))
+        (logger :error  "Unexpected exception in handle-ws")
+        (logger :error (u/ex-msg-and-stacktrace e))))))
 
-(defn make-http-handler [handle-http http-timeout-ms]
+(defn make-http-handler [logger handle-http http-timeout-ms]
   (fn [req channel]
     (au/go
       (try
@@ -97,8 +99,8 @@
                                     (u/sym-map rsp-class-name)))))))
         (catch Exception e
           (let [msg "Unexpected exception in HTTP handler."]
-            (errorf msg)
-            (lu/log-ex e)
+            (logger :error msg)
+            (logger :error (u/ex-msg-and-stacktrace e))
             (http/send! channel {:status 500 :body msg})))))))
 
 (defn handle-http-test [req]
@@ -114,37 +116,46 @@
   ([port on-connect on-disconnect compression-type opts]
    (let [{:keys [handle-http
                  http-timeout-ms
-                 dns-cache-secs]
-          :or {dns-cache-secs 60}} opts
+                 dns-cache-secs
+                 logger]
+          :or {dns-cache-secs 60
+               logger u/noop-logger}} opts
          _ (Security/setProperty "networkaddress.cache.ttl"
                                  (str dns-cache-secs))
          *conn-count (atom 0)
          *stopper (atom nil)
          *conn-id (atom 0)
-         handle-ws* (make-ws-handler on-connect on-disconnect compression-type
-                                     *conn-count *conn-id)
+         handle-ws* (make-ws-handler logger on-connect on-disconnect
+                                     compression-type *conn-count *conn-id)
          handle-http* (if handle-http
-                        (make-http-handler handle-http http-timeout-ms)
-                        (make-http-handler handle-http-test 1000))
+                        (make-http-handler logger handle-http http-timeout-ms)
+                        (make-http-handler logger handle-http-test 1000))
          handler (fn [req]
                    (http/with-channel req channel
                      (if (http/websocket? channel)
                        (handle-ws* req channel)
                        (handle-http* req channel))))
          starter (fn []
+                   (logger :info "Attempting to start tube server.")
                    (reset! *stopper (http/run-server handler (u/sym-map port)))
-                   (infof "Started server on port %s." port))]
-     (->TubeServer *conn-count starter *stopper))))
+                   (logger :info
+                           (format "Started tube server on port %s." port)))]
+     (->TubeServer logger *conn-count starter *stopper))))
 
 (defn run-test-server
   ([] (run-test-server 8080))
   ([port]
-   (u/configure-logging)
    (let [handle-http (fn [req]
                        {:status 200
                         :headers {"content-type" "text/plain"}
                         :body "Yo"})
          *server (atom nil)
+         formatter (f/formatters :hour-minute-second-ms)
+         timestamp #(f/unparse formatter (t/now))
+         logger (fn [level msg]
+                  (println
+                   (str (timestamp) " "(clojure.string/upper-case (name level))
+                        " " msg)))
          on-connect (fn [conn]
                       (let [conn-id (connection/get-conn-id conn)
                             uri (connection/get-uri conn)
@@ -153,19 +164,22 @@
                             on-rcv (fn [conn data]
                                      (connection/send
                                       conn (ba/reverse-byte-array data)))]
-                        (infof "Opened conn %s on %s from %s. Conn count: %s"
-                               conn-id uri remote-addr conn-count)
+                        (logger :info (format (str "Opened conn %s on %s from "
+                                                   "%s. Conn count: %s")
+                                              conn-id uri remote-addr
+                                              conn-count))
                         (connection/set-on-rcv conn on-rcv)))
          on-disconnect (fn [conn code reason]
                          (let [conn-id (connection/get-conn-id conn)
                                uri (connection/get-uri conn)
                                remote-addr (connection/get-remote-addr conn)
                                conn-count (get-conn-count @*server)]
-                           (infof (str "Closed conn %s on %s from %s. "
-                                       "Conn count: %s")
-                                  conn-id uri remote-addr conn-count)))
+                           (logger :info (format
+                                          (str "Closed conn %s on %s from %s. "
+                                               "Conn count: %s")
+                                          conn-id uri remote-addr conn-count))))
          compression-type :smart
-         opts (u/sym-map handle-http)
+         opts (u/sym-map handle-http logger)
          server (tube-server port on-connect on-disconnect
                              compression-type opts)]
      (reset! *server server)

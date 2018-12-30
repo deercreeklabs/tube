@@ -5,19 +5,15 @@
    [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
    [deercreeklabs.bytes :as tbs]
-   [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.client :as tube-client]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
    #?(:clj [org.httpkit.client :as http])
    [schema.core :as s :include-macros true]
-   [schema.test :as st]
-   [taoensso.timbre :as timbre :refer [debugf errorf infof]]))
+   [schema.test :as st]))
 
 ;; Use this instead of fixtures, which are hard to make work w/ async testing.
 (s/set-fn-validation! true)
-
-(u/configure-logging)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Unit tests
 

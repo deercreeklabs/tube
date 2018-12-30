@@ -1,23 +1,9 @@
 (ns deercreeklabs.tube.utils
-  "Common code and utilities. Parts from https://github.com/farbetter/utils."
-  (:refer-clojure :exclude [byte-array send])
+  "Common code and utilities."
   (:require
-   [#?(:clj clj-time.format :cljs cljs-time.format) :as f]
-   [#?(:clj clj-time.core :cljs cljs-time.core) :as t]
-   [#?(:clj clojure.core.async.impl.protocols
-       :cljs cljs.core.async.impl.protocols) :as cap]
-   [#?(:clj clojure.test :cljs cljs.test) :as test :include-macros true]
    [deercreeklabs.baracus :as ba]
-   [deercreeklabs.log-utils :as lu :refer [debugs]]
-   [schema.core :as s]
-   [taoensso.timbre :as timbre :refer [debugf errorf infof]])
-  #?(:clj
-     (:import
-      (com.google.common.primitives Bytes)
-      (java.io ByteArrayInputStream ByteArrayOutputStream)
-      (java.util Arrays)
-      (java.util.zip DeflaterOutputStream InflaterOutputStream))
-     :cljs
+   [schema.core :as s])
+  #?(:cljs
      (:require-macros
       [deercreeklabs.tube.utils :refer [sym-map]])))
 
@@ -46,6 +32,31 @@
         [0 data]
         [1 deflated]))))
 
+(s/defn ex-msg :- s/Str
+  [e]
+  #?(:clj (.toString ^Exception e)
+     :cljs (.-message e)))
+
+(s/defn ex-stacktrace :- s/Str
+  [e]
+  #?(:clj (clojure.string/join "\n" (map str (.getStackTrace ^Exception e)))
+     :cljs (.-stack e)))
+
+(s/defn ex-msg-and-stacktrace :- s/Str
+  [e]
+  (str "\nException:\n"
+       (ex-msg e)
+       "\nStacktrace:\n"
+       (ex-stacktrace e)))
+
+(s/defn current-time-ms :- s/Num
+  []
+  #?(:clj (System/currentTimeMillis)
+     :cljs (.getTime (js/Date.))))
+
+(defn noop-logger [level msg]
+  )
+
 ;;;;;;;;;;;;;;;;;;;; Platform detection ;;;;;;;;;;;;;;
 
 (s/defn jvm? :- s/Bool
@@ -71,16 +82,3 @@
     (node?) :node
     (browser?) :browser
     :else :unknown))
-
-(defn configure-logging []
-  (timbre/merge-config!
-   {:level :debug
-    :output-fn lu/short-log-output-fn
-    :appenders
-    {:println {:ns-blacklist
-               ["org.eclipse.jetty.*"]}}}))
-
-(s/defn current-time-ms :- s/Num
-  []
-  #?(:clj (System/currentTimeMillis)
-     :cljs (.getTime (js/Date.))))

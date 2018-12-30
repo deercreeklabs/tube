@@ -2,10 +2,8 @@
   (:refer-clojure :exclude [send])
   (:require
    [deercreeklabs.baracus :as ba]
-   [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.utils :as u]
-   #?(:clj [primitive-math])
-   [taoensso.timbre :as timbre :refer [debugf errorf infof]])
+   #?(:clj [primitive-math]))
   #?(:clj
      (:import
       (java.io ByteArrayOutputStream))))

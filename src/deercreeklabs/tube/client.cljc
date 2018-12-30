@@ -4,15 +4,12 @@
    [clojure.core.async :as ca]
    [deercreeklabs.async-utils :as au]
    [deercreeklabs.baracus :as ba]
-   [deercreeklabs.log-utils :as lu :refer [debugs]]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
    #?(:clj [gniazdo.core :as ws])
    #?(:cljs [goog.object])
    #?(:clj [primitive-math])
-   [schema.core :as s]
-   [taoensso.timbre :as timbre
-    #?(:clj :refer :cljs :refer-macros) [debugf errorf infof]])
+   [schema.core :as s])
   #?(:clj
      (:import
       (java.net ConnectException URI))))
@@ -40,7 +37,8 @@
 
 #?(:clj
    (defn <ws-client-clj
-     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
+     [logger url connected-ch on-error *handle-rcv *close-client
+      log-conn-failure?]
      (ca/go
        (try
          (let [fragment-size 31999
@@ -63,17 +61,18 @@
                           (ws/send-msg socket (ba/slice-byte-array data))
                           (catch Exception e
                             (on-error
-                             (lu/ex-msg-and-stacktrace e)))))]
+                             (u/ex-msg-and-stacktrace e)))))]
            (u/sym-map sender closer fragment-size))
          (catch Exception e
            (when log-conn-failure?
-             (debugf "Websocket failed to connect. Error: %s" e))
+             (logger :info "Websocket failed to connect. Error: %s" e))
            (ca/put! connected-ch false)
            nil)))))
 
 #?(:cljs
    (defn <ws-client-node
-     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
+     [logger url connected-ch on-error *handle-rcv *close-client
+      log-conn-failure?]
      (au/go
        (let [fragment-size 32000
              WSC (goog.object.get (js/require "websocket") "client")
@@ -109,7 +108,8 @@
 
 #?(:cljs
    (defn <ws-client-browser
-     [url connected-ch on-error *handle-rcv *close-client log-conn-failure?]
+     [logger url connected-ch on-error *handle-rcv *close-client
+      log-conn-failure?]
      (au/go
        (let [fragment-size 32000
              client (js/WebSocket. url)
@@ -151,13 +151,14 @@
   (au/go
     (let [{:keys [sender closer fragment-size]} wsc
           {:keys [compression-type keep-alive-secs on-disconnect on-rcv
-                  log-conn-failure? connect-timeout-ms]
+                  log-conn-failure? connect-timeout-ms logger]
            :or {compression-type :smart
                 keep-alive-secs default-keepalive-secs
                 on-disconnect (constantly nil)
                 on-rcv (constantly nil)
                 log-conn-failure? true
-                connect-timeout-ms 5000}} options
+                connect-timeout-ms 5000
+                logger u/noop-logger}} options
           *shutdown? (atom false)
           ready-ch (ca/chan)
           on-connect (fn [conn]
@@ -178,7 +179,7 @@
                    connected?)
         (do
           (when log-conn-failure?
-            (errorf "Websocket to %s failed to connect." url))
+            (logger :error (str "Websocket to " url " failed to connect.")))
           (connection/close conn 1000 "Failure to connect" false)
           nil)
         (do
@@ -198,10 +199,10 @@
                     (> (#?(:clj long :cljs identity) (u/current-time-ms))
                        (#?(:clj long :cljs identity) expiry-ms))
                     (do
-                      (errorf
-                       (str "Websocket to %s connected, but did not complete "
-                            "negotiation before timeout (%s ms)")
-                       url connect-timeout-ms)
+                      (logger :error
+                              (str "Websocket to " url " connected, but did "
+                                   "not complete negotiation before timeout ("
+                                   connect-timeout-ms " ms)"))
                       (connection/close conn 1002
                                         "Protocol negotiation timed out" false)
                       nil)
@@ -231,25 +232,26 @@
                 (s/optional-key :on-disconnect) (s/=> s/Any)
                 (s/optional-key :on-rcv) (s/=> s/Any)
                 (s/optional-key :log-conn-failure?) s/Bool
+                (s/optional-key :logger) (s/=> s/Any s/Keyword s/Str)
                 (s/optional-key :connect-timeout-ms) s/Int
                 (s/optional-key :<ws-client) (s/=> s/Any)}]
    (au/go
      (let [*handle-rcv (atom nil)
            *close-client (atom nil)
            connected-ch (ca/chan)
+           {:keys [<ws-client logger log-conn-failure?]
+            :or {logger u/noop-logger}} options
            on-error (fn [msg]
                       (try
-                        (errorf "Error in websocket: %s" msg)
+                        (logger :error (str "Error in websocket: " msg))
                         (when-let [close-client @*close-client]
                           (close-client 1011 msg true))
                         (catch #?(:clj Exception :cljs js/Error) e
-                          (errorf "Unexpected error in on-error.")
-                          (lu/log-ex e))))
-           <ws-client (or (:<ws-client options)
-                          <ws-client*)
-           wsc (au/<? (<ws-client
-                       url connected-ch on-error *handle-rcv
-                       *close-client (:log-conn-failure? options)))]
+                          (logger :error "Unexpected error in on-error.")
+                          (logger :error (u/ex-msg-and-stacktrace e)))))
+           <ws-client (or <ws-client <ws-client*)
+           wsc (au/<? (<ws-client logger url connected-ch on-error *handle-rcv
+                                  *close-client log-conn-failure?))]
        (when wsc
          (au/<? (<connect wsc url options *handle-rcv *close-client
                           connected-ch)))))))
