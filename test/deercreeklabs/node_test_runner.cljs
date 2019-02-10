@@ -7,7 +7,6 @@
 (nodejs/enable-util-print!)
 
 (defn -main [& args]
-   (.install (js/require "source-map-support"))
   (run-tests 'deercreeklabs.tube-test))
 
 (set! *main-cli-fn* -main)

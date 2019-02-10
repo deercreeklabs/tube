@@ -2,17 +2,18 @@
 /target
 /classes
 /checkouts
-pom.xml
-pom.xml.asc
 *.jar
 *.class
 /.lein-*
 /.nrepl-port
 /.cljs_*
+/.cpcache
+/out
 
 # JS stuff
 /node_modules
 package.json
+package-lock.json
 
 # Emacs stuff
 *~

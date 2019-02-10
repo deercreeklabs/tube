@@ -7,9 +7,6 @@
      (:require-macros
       [deercreeklabs.tube.utils :refer [sym-map]])))
 
-#?(:cljs
-   (set! *warn-on-infer* true))
-
 ;;;;;;;;;;;;;;;;;;;; Macros ;;;;;;;;;;;;;;;;;;;;
 
 (defmacro sym-map
@@ -23,14 +20,6 @@
   (zipmap (map keyword syms) syms))
 
 ;;;;;;;;;;;;;;;;;;;; Utility fns ;;;;;;;;;;;;;;;;;;;;
-
-(defn compress-smart [data]
-  (if (<= (count data) 30)
-    [0 data]
-    (let [deflated (ba/deflate data)]
-      (if (<= (count data) (count deflated))
-        [0 data]
-        [1 deflated]))))
 
 (s/defn ex-msg :- s/Str
   [e]

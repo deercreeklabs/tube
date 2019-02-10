@@ -8,9 +8,6 @@
      (:import
       (java.io ByteArrayOutputStream))))
 
-#?(:cljs
-   (set! *warn-on-infer* true))
-
 #?(:clj
    (primitive-math/use-primitive-operators))
 
@@ -170,7 +167,8 @@
       (let [whole #?(:clj (.toByteArray ^ByteArrayOutputStream output-stream)
                      :cljs (ba/concat-byte-arrays @output-stream))
             msg (if @*cur-msg-compressed?
-                  (ba/inflate whole)
+                  ;; TODO: Fix compression
+                  whole ;;(ba/inflate whole)
                   whole)]
         #?(:clj (.reset ^ByteArrayOutputStream output-stream)
            :cljs (reset! output-stream []))
@@ -189,11 +187,9 @@
     compression-type client? on-rcv]
    (let [on-rcv (or on-rcv (constantly nil))
          *on-rcv (atom on-rcv)
-         compress (case compression-type
-                    nil #(vector 0 %)
-                    :none #(vector 0 %)
-                    :smart u/compress-smart
-                    :deflate #(vector 1 (ba/deflate %)))
+         ;; Ignore compression type for now. Don't compress.
+         ;; TODO: Fix compression
+         compress #(vector 0 %)
          output-stream #?(:clj (ByteArrayOutputStream.)
                           :cljs (atom []))
          *on-disconnect (atom nil)

@@ -14,9 +14,6 @@
      (:import
       (java.net ConnectException URI))))
 
-#?(:cljs
-   (set! *warn-on-infer* true))
-
 #?(:clj
    (primitive-math/use-primitive-operators))
 
@@ -99,8 +96,7 @@
          (.on client "connectFailed"
               (fn [err]
                 (when log-conn-failure?
-                  (debugf "Websocket failed to connect. Error: %s"
-                          err))
+                  (logger (str "Websocket failed to connect. Error: " err)))
                 (ca/put! connected-ch false)))
          (.on client "connect" conn-handler)
          (.connect ^js/WebSocketClient client url)
@@ -133,8 +129,8 @@
                    (on-error err)
                    (do
                      (when log-conn-failure?
-                       (debugf "Websocket failed to connect. Error: %s"
-                               err))
+                       (logger
+                        (str "Websocket failed to connect. Error: " err)))
                      (ca/put! connected-ch false)))))
          (set! (.-onmessage client) msg-handler)
          (u/sym-map sender closer fragment-size)))))

@@ -46,7 +46,7 @@
                           :timeout timeout})))))))
 
 (defn get-lots-of-bytes []
-  #?(:clj (ba/read-byte-array-from-file "lots_o_bytes.bin")
+  #?(:clj (ba/read-byte-array-from-file "test/lots_o_bytes.bin")
      :cljs (ba/concat-byte-arrays (take 10 (repeat tbs/test-bytes)))))
 
 (deftest test-round-trip-w-small-msg
