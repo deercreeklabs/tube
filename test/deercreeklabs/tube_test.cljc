@@ -76,9 +76,9 @@
   (au/test-async
    30000
    (ca/go
-     (let [disconnect-ch (ca/chan)
+     (let [disconnect-ch (ca/promise-chan)
            on-disconnect (fn [conn code reason]
-                        (ca/put! disconnect-ch true))
+                           (ca/put! disconnect-ch true))
            msg (ba/byte-array [72 101 108 108 111 32 119 111 114 108 100 33])
            rsp (au/<? (<send-ws-msg-and-return-rsp msg 25000 on-disconnect))
            _ (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))

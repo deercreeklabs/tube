@@ -67,48 +67,15 @@
            nil)))))
 
 #?(:cljs
-   (defn <ws-client-node
+   (defn <ws-client-cljs
      [logger url connected-ch on-error *handle-rcv *close-client
       log-conn-failure?]
      (au/go
        (let [fragment-size 32000
-             WSC (goog.object.get (js/require "websocket") "client")
-             ^js/WebSocketClient client (WSC.)
-             *conn (atom nil)
-             msg-handler (fn [msg-obj]
-                           (let [data (-> (goog.object.get msg-obj "binaryData")
-                                          (js/Int8Array.))]
-                             (@*handle-rcv data)))
-             closer #(if @*conn
-                       (.close ^js/WebSocketConnection @*conn)
-                       (.abort client))
-             sender (fn [data]
-                      (.sendBytes ^js/WebSocketConnection @*conn
-                                  (js/Buffer. data)))
-             conn-handler (fn [^js/WebSocketConnection conn]
-                            (.on conn "close" (fn [code reason]
-                                                (@*close-client
-                                                 code reason true)))
-                            (.on conn "error" on-error)
-                            (.on conn "message" msg-handler)
-                            (reset! *conn conn)
-                            (ca/put! connected-ch true))]
-         (.on client "connectFailed"
-              (fn [err]
-                (when log-conn-failure?
-                  (logger (str "Websocket failed to connect. Error: " err)))
-                (ca/put! connected-ch false)))
-         (.on client "connect" conn-handler)
-         (.connect ^js/WebSocketClient client url)
-         (u/sym-map sender closer fragment-size)))))
-
-#?(:cljs
-   (defn <ws-client-browser
-     [logger url connected-ch on-error *handle-rcv *close-client
-      log-conn-failure?]
-     (au/go
-       (let [fragment-size 32000
-             client (js/WebSocket. url)
+             client (case (u/platform-kw)
+                      :node (let [WSC (js/require "ws")]
+                              (WSC. url))
+                      :browser (js/WebSocket. url))
              *connected? (atom false)
              msg-handler (fn [msg-obj]
                            (let [data (js/Int8Array. (.-data msg-obj))]
@@ -129,11 +96,13 @@
                    (on-error err)
                    (do
                      (when log-conn-failure?
-                       (logger
-                        (str "Websocket failed to connect. Error: " err)))
+                       (logger :error
+                               (str "Websocket failed to connect. Error: "
+                                    err)))
                      (ca/put! connected-ch false)))))
          (set! (.-onmessage client) msg-handler)
          (u/sym-map sender closer fragment-size)))))
+
 
 (defn start-keep-alive-loop [conn keep-alive-secs *shutdown?]
   (au/go
@@ -209,9 +178,7 @@
 
 (defn <ws-client* [& args]
   (let [factory #?(:clj <ws-client-clj
-                   :cljs (case (u/platform-kw)
-                           :node <ws-client-node
-                           :browser <ws-client-browser))]
+                   :cljs <ws-client-cljs)]
     (apply factory args)))
 
 (s/defn <tube-client
@@ -234,7 +201,7 @@
    (au/go
      (let [*handle-rcv (atom nil)
            *close-client (atom nil)
-           connected-ch (ca/chan)
+           connected-ch (ca/promise-chan)
            {:keys [<ws-client logger log-conn-failure?]
             :or {logger u/noop-logger}} options
            on-error (fn [msg]

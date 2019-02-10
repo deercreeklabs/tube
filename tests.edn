@@ -1,10 +1,7 @@
 #kaocha/v1
-{:tests [{:id :unit
+{:tests [{:id :integration
           :test-paths ["test/deercreeklabs"]}
-         {:id :unit-node
-          :type :kaocha.type/cljs
-          :test-paths ["test/deercreeklabs/"]}
-         {:id :unit-browser
+         {:id :integration-browser
           :type :kaocha.type/cljs
           :test-paths ["test/deercreeklabs/"]
           :cljs/repl-env cljs.repl.browser/repl-env}]
