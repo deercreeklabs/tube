@@ -1,8 +1,7 @@
 {:deps
  {clj-time {:mvn/version "0.15.1"}
-  deercreeklabs/async-utils {:git/url "https://github.com/deercreeklabs/async-utils.git"
-                             :sha "3ea2db18415d02b001cb98861f90741cf9fd2303"}
-  deercreeklabs/baracus {:mvn/version "0.2.0"}
+  deercreeklabs/async-utils {:mvn/version "0.1.17"}
+  deercreeklabs/baracus {:mvn/version "0.2.2"}
   http-kit {:mvn/version "2.3.0"}
   org.clojure/clojure {:mvn/version "1.10.1"}
   org.clojure/clojurescript {:mvn/version "1.10.520"}
@@ -28,6 +27,10 @@
   :dev {:extra-deps {mvxcvi/puget {:mvn/version "1.1.0"}
                      org.clojure/tools.namespace {:mvn/version "0.2.11"}}}
 
+  :pack {:extra-deps {pack/pack.alpha
+                      {:git/url "https://github.com/juxt/pack.alpha.git"
+                       :sha "2769a6224bfb938e777906ea311b3daf7d2220f5"}}
+         :main-opts ["-m"]}
   :run {:main-opts ["-m" "deercreeklabs.tube.server"]}
 
   :test {:extra-paths ["test"]
