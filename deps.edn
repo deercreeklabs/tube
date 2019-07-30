@@ -3,23 +3,33 @@
   deercreeklabs/async-utils {:mvn/version "0.1.16"}
   deercreeklabs/baracus {:mvn/version "0.2.0"}
   http-kit {:mvn/version "2.3.0"}
-  org.clojure/clojure {:mvn/version "1.10.0"}
-  org.clojure/clojurescript {:mvn/version "1.10.516"}
-  org.clojure/core.async {:mvn/version "0.4.490"}
+  org.clojure/clojure {:mvn/version "1.10.1"}
+  org.clojure/clojurescript {:mvn/version "1.10.520"}
+  org.clojure/core.async {:mvn/version "0.4.500"}
   primitive-math {:mvn/version "0.1.6"}
-  prismatic/schema {:mvn/version "1.1.10"}
+  dept24c/schema {:mvn/version "1.1.12"}
   stylefruits/gniazdo {:mvn/version "1.1.1"}}
 
  :mvn/repos {"central" {:url "https://repo1.maven.org/maven2/"}
              "clojars" {:url "https://repo.clojars.org/"}}
 
  :aliases
- {:dev {:extra-deps {mvxcvi/puget {:mvn/version "1.1.0"}
+ {:cider-clj {:extra-deps {cider/cider-nrepl {:mvn/version "0.21.1"}}
+              :main-opts ["-m" "nrepl.cmdline" "--middleware"
+                          "[cider.nrepl/cider-middleware]"]}
+
+  :cider-cljs {:extra-deps {cider/cider-nrepl {:mvn/version "0.21.1"}
+                            cider/piggieback {:mvn/version "0.4.0"}}
+               :main-opts
+               ["-m" "nrepl.cmdline" "--middleware"
+                "[cider.nrepl/cider-middleware,cider.piggieback/wrap-cljs-repl]"]}
+
+  :dev {:extra-deps {mvxcvi/puget {:mvn/version "1.1.0"}
                      org.clojure/tools.namespace {:mvn/version "0.2.11"}}}
 
   :run {:main-opts ["-m" "deercreeklabs.tube.server"]}
 
   :test {:extra-paths ["test"]
-         :extra-deps {lambdaisland/kaocha {:mvn/version "0.0-389"}
-                      lambdaisland/kaocha-cljs {:mvn/version "0.0-16"}
-                      lambdaisland/kaocha-cloverage {:mvn/version "0.0-22"}}}}}
+         :extra-deps {lambdaisland/kaocha {:mvn/version "0.0-529"}
+                      lambdaisland/kaocha-cljs {:mvn/version "0.0-40"}
+                      lambdaisland/kaocha-cloverage {:mvn/version "0.0-32"}}}}}
