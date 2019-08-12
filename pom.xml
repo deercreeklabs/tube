@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>deercreeklabs</groupId>
   <artifactId>tube</artifactId>
-  <version>0.2.8</version>
+  <version>0.2.9</version>
   <name>tube</name>
   <description>A websocket client and server library</description>
   <url>https://github.com/deercreeklabs/tube</url>
@@ -55,7 +55,7 @@
     <dependency>
       <groupId>deercreeklabs</groupId>
       <artifactId>async-utils</artifactId>
-      <version>0.1.17</version>
+      <version>0.1.18</version>
     </dependency>
     <dependency>
       <groupId>deercreeklabs</groupId>
