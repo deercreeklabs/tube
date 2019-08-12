@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>deercreeklabs</groupId>
   <artifactId>tube</artifactId>
-  <version>0.2.7</version>
+  <version>0.2.8</version>
   <name>tube</name>
   <description>A websocket client and server library</description>
   <url>https://github.com/deercreeklabs/tube</url>
@@ -33,11 +33,6 @@
       <version>1.10.1</version>
     </dependency>
     <dependency>
-      <groupId>dept24c</groupId>
-      <artifactId>schema</artifactId>
-      <version>1.1.12</version>
-    </dependency>
-    <dependency>
       <groupId>org.clojure</groupId>
       <artifactId>clojurescript</artifactId>
       <version>1.10.520</version>
@@ -45,7 +40,7 @@
     <dependency>
       <groupId>clj-time</groupId>
       <artifactId>clj-time</artifactId>
-      <version>0.15.1</version>
+      <version>0.15.2</version>
     </dependency>
     <dependency>
       <groupId>primitive-math</groupId>
@@ -65,7 +60,7 @@
     <dependency>
       <groupId>deercreeklabs</groupId>
       <artifactId>baracus</artifactId>
-      <version>0.2.2</version>
+      <version>0.2.3</version>
     </dependency>
     <dependency>
       <groupId>org.clojure</groupId>
