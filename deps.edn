@@ -1,13 +1,13 @@
 {:deps
  {clj-time {:mvn/version "0.15.2"}
-  deercreeklabs/async-utils {:mvn/version "0.1.18"}
-  deercreeklabs/baracus {:mvn/version "0.2.3"}
+  deercreeklabs/async-utils {:mvn/version "0.1.19"}
+  deercreeklabs/baracus {:mvn/version "0.2.4"}
   http-kit {:mvn/version "2.3.0"}
   org.clojure/clojure {:mvn/version "1.10.1"}
-  org.clojure/clojurescript {:mvn/version "1.10.520"}
-  org.clojure/core.async {:mvn/version "0.4.500"}
+  org.clojure/clojurescript {:mvn/version "1.10.597"}
+  org.clojure/core.async {:mvn/version "0.6.532"}
   primitive-math {:mvn/version "0.1.6"}
-  stylefruits/gniazdo {:mvn/version "1.1.1"}}
+  stylefruits/gniazdo {:mvn/version "1.1.2"}}
 
  :mvn/repos {"central" {:url "https://repo1.maven.org/maven2/"}
              "clojars" {:url "https://repo.clojars.org/"}}

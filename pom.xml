@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>deercreeklabs</groupId>
   <artifactId>tube</artifactId>
-  <version>0.2.9</version>
+  <version>0.2.10</version>
   <name>tube</name>
   <description>A websocket client and server library</description>
   <url>https://github.com/deercreeklabs/tube</url>
@@ -35,7 +35,7 @@
     <dependency>
       <groupId>org.clojure</groupId>
       <artifactId>clojurescript</artifactId>
-      <version>1.10.520</version>
+      <version>1.10.597</version>
     </dependency>
     <dependency>
       <groupId>clj-time</groupId>
@@ -50,22 +50,22 @@
     <dependency>
       <groupId>stylefruits</groupId>
       <artifactId>gniazdo</artifactId>
-      <version>1.1.1</version>
+      <version>1.1.2</version>
     </dependency>
     <dependency>
       <groupId>deercreeklabs</groupId>
       <artifactId>async-utils</artifactId>
-      <version>0.1.18</version>
+      <version>0.1.19</version>
     </dependency>
     <dependency>
       <groupId>deercreeklabs</groupId>
       <artifactId>baracus</artifactId>
-      <version>0.2.3</version>
+      <version>0.2.4</version>
     </dependency>
     <dependency>
       <groupId>org.clojure</groupId>
       <artifactId>core.async</artifactId>
-      <version>0.4.500</version>
+      <version>0.6.532</version>
     </dependency>
     <dependency>
       <groupId>http-kit</groupId>
