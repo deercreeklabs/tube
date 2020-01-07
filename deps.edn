@@ -1,11 +1,10 @@
 {:deps
- {clj-time {:mvn/version "0.15.2"}
-  deercreeklabs/async-utils {:mvn/version "0.1.19"}
-  deercreeklabs/baracus {:mvn/version "0.2.4"}
-  http-kit {:mvn/version "2.3.0"}
+ {deercreeklabs/async-utils {:mvn/version "0.1.20"}
+  deercreeklabs/baracus {:mvn/version "0.2.5"}
+  io.netty/netty-all {:mvn/version "4.1.45.Final"}
+  io.netty/netty-tcnative-boringssl-static {:mvn/version "2.0.28.Final"}
   org.clojure/clojure {:mvn/version "1.10.1"}
   org.clojure/clojurescript {:mvn/version "1.10.597"}
-  org.clojure/core.async {:mvn/version "0.6.532"}
   primitive-math {:mvn/version "0.1.6"}
   stylefruits/gniazdo {:mvn/version "1.1.2"}}
 
@@ -13,27 +12,28 @@
              "clojars" {:url "https://repo.clojars.org/"}}
 
  :aliases
- {:cider-clj {:extra-deps {cider/cider-nrepl {:mvn/version "0.21.1"}}
+ {:cider-clj {:extra-deps {cider/cider-nrepl {:mvn/version "0.22.4"}}
               :main-opts ["-m" "nrepl.cmdline" "--middleware"
                           "[cider.nrepl/cider-middleware]"]}
 
-  :cider-cljs {:extra-deps {cider/cider-nrepl {:mvn/version "0.21.1"}
-                            cider/piggieback {:mvn/version "0.4.0"}}
+  :cider-cljs {:extra-deps {cider/cider-nrepl {:mvn/version "0.22.4"}
+                            cider/piggieback {:mvn/version "0.4.2"}}
                :main-opts
                ["-m" "nrepl.cmdline" "--middleware"
                 "[cider.nrepl/cider-middleware,cider.piggieback/wrap-cljs-repl]"]}
 
-  :dev {:extra-deps {mvxcvi/puget {:mvn/version "1.1.0"}
-                     org.clojure/tools.namespace {:mvn/version "0.2.11"}}}
+  :dev {:extra-deps {mvxcvi/puget {:mvn/version "1.2.0"}
+                     org.clojure/tools.namespace {:mvn/version "0.3.1"}}}
 
   :pack {:extra-deps {pack/pack.alpha
                       {:git/url "https://github.com/juxt/pack.alpha.git"
-                       :sha "2769a6224bfb938e777906ea311b3daf7d2220f5"}}
+                       :sha "c70740ffc10805f34836da2160fa1899601fac02"}}
          :main-opts ["-m"]}
 
   :run {:main-opts ["-m" "deercreeklabs.tube.server"]}
 
   :test {:extra-paths ["test"]
-         :extra-deps {lambdaisland/kaocha {:mvn/version "0.0-529"}
-                      lambdaisland/kaocha-cljs {:mvn/version "0.0-40"}
-                      lambdaisland/kaocha-cloverage {:mvn/version "0.0-32"}}}}}
+         :extra-deps {http-kit {:mvn/version "2.3.0"}
+                      lambdaisland/kaocha {:mvn/version "0.0-573"}
+                      lambdaisland/kaocha-cljs {:mvn/version "0.0-68"}
+                      lambdaisland/kaocha-cloverage {:mvn/version "0.0-41"}}}}}

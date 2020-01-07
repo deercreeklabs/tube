@@ -20,30 +20,31 @@
 ;;;; IMPORTANT!!! You must start a server for these tests to work.
 ;;;; e.g. $ lein run
 
-(def port 8080)
+(def normal-uri "ws://localhost:8080/ws")
+(def ssl-uri "wss://localhost:8443/ws")
 
 (defn <send-ws-msg-and-return-rsp
-  ([msg timeout]
-   (<send-ws-msg-and-return-rsp msg timeout (constantly nil)))
-  ([msg timeout on-disconnect]
-   (ca/go
-     (let [uri (str "ws://localhost:" port)
-           client-rcv-ch (ca/chan)
+  ([uri msg timeout]
+   (<send-ws-msg-and-return-rsp uri msg timeout (constantly nil)))
+  ([uri msg timeout on-disconnect]
+   (au/go
+     (let [client-rcv-ch (ca/chan)
            options {:on-rcv (fn [conn data]
                               (ca/put! client-rcv-ch data))
                     :on-disconnect on-disconnect
                     :keep-alive-secs 25}
-           client (au/<? (tube-client/<tube-client uri 1000 options))
-           _ (is (not= nil client))
-           _ (tube-client/send client msg)
-           [ret ch] (ca/alts! [client-rcv-ch (ca/timeout timeout)])]
-       (tube-client/close client)
-       (if (= client-rcv-ch ch)
-         ret
-         (throw (ex-info "Timed out waiting for client response"
-                         {:type :execution-error
-                          :subtype :timeout
-                          :timeout timeout})))))))
+           client (au/<? (tube-client/<tube-client uri 1000 options))]
+       (is (not= nil client))
+       (when client
+         (tube-client/send client msg)
+         (let [[ret ch] (ca/alts! [client-rcv-ch (ca/timeout timeout)])]
+           (tube-client/close client)
+           (if (= client-rcv-ch ch)
+             ret
+             (throw (ex-info "Timed out waiting for client response"
+                             {:type :execution-error
+                              :subtype :timeout
+                              :timeout timeout})))))))))
 
 (defn get-lots-of-bytes []
   #?(:clj (ba/read-byte-array-from-file "test/lots_o_bytes.bin")
@@ -52,39 +53,53 @@
 (deftest test-round-trip-w-small-msg
   (au/test-async
    30000
-   (ca/go
+   (au/go
      (let [msg (ba/byte-array [72 101 108 108 111 32 119 111 114 108 100 33])
-           rsp (au/<? (<send-ws-msg-and-return-rsp msg 25000))]
-       (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))))))
+           norm-rsp (au/<? (<send-ws-msg-and-return-rsp normal-uri msg 25000))
+           ;;ssl-rsp (au/<? (<send-ws-msg-and-return-rsp ssl-uri msg 25000))
+           ]
+       (is (not= nil norm-rsp))
+       #_(is (not= nil ssl-rsp))
+       (when norm-rsp
+         (is (ba/equivalent-byte-arrays? msg
+                                         (ba/reverse-byte-array norm-rsp))))
+       #_(when ssl-rsp
+           (is (ba/equivalent-byte-arrays? msg
+                                           (ba/reverse-byte-array ssl-rsp))))))))
 
 (deftest test-round-trip-w-large-msg
   (au/test-async
    #?(:clj 30000
       :cljs 60000)
-   (ca/go
+   (au/go
      (let [msg (get-lots-of-bytes)
-           rsp (au/<? (<send-ws-msg-and-return-rsp msg 60000))
-           rev (ba/reverse-byte-array rsp)
-           m100 (ba/slice-byte-array msg 0 100)
-           r100 (ba/slice-byte-array rev 0 100)
-           msg-size (count msg)
-           rsp-size (count rsp)]
-       (is (= msg-size rsp-size))
-       (is (ba/equivalent-byte-arrays? m100 r100))))))
+           rsp (au/<? (<send-ws-msg-and-return-rsp normal-uri msg 60000))]
+       (is (not= nil rsp))
+       (when rsp
+         (let [rev (ba/reverse-byte-array rsp)
+               m100 (ba/slice-byte-array msg 0 100)
+               r100 (ba/slice-byte-array rev 0 100)
+               msg-size (count msg)
+               rsp-size (count rsp)]
+           (is (= msg-size rsp-size))
+           (is (ba/equivalent-byte-arrays? m100 r100))))))))
 
 (deftest test-on-disconnect
   (au/test-async
    30000
-   (ca/go
+   (au/go
      (let [disconnect-ch (ca/promise-chan)
            on-disconnect (fn [conn code reason]
                            (ca/put! disconnect-ch true))
            msg (ba/byte-array [72 101 108 108 111 32 119 111 114 108 100 33])
-           rsp (au/<? (<send-ws-msg-and-return-rsp msg 25000 on-disconnect))
-           _ (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))
-           [ret ch] (ca/alts! [disconnect-ch (ca/timeout 5000)])]
-       (is (= disconnect-ch ch))
-       (is (= true ret))))))
+           rsp (au/<? (<send-ws-msg-and-return-rsp
+                       normal-uri msg 25000 on-disconnect))]
+       (is (not= nil rsp))
+       (when rsp
+         (is (ba/equivalent-byte-arrays? msg (ba/reverse-byte-array rsp)))
+         (let [[ret ch] (ca/alts! [disconnect-ch (ca/timeout 5000)])]
+           (is (= disconnect-ch ch))
+           (is (= true ret))))))))
 
 (deftest test-encode-decode
   (let [data [[0 [0]]
@@ -105,13 +120,13 @@
 (deftest test-bad-uri
   (au/test-async
    2000
-   (ca/go
+   (au/go
      (let [uri "ws://not-a-real-url.not-a-domain"
            client (au/<? (tube-client/<tube-client
                           uri 1000 {:log-conn-failure? false}))]
        (is (= nil client))))))
 
-;; TODO: Make this work in cljs
+;; TODO: Make these work in cljs and w/ SSL
 #?(:clj
    (deftest test-http-handler
      (let [ret @(http/get "http://localhost:8080")]

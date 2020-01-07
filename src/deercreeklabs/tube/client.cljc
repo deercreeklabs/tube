@@ -12,7 +12,10 @@
    [schema.core :as s])
   #?(:clj
      (:import
-      (java.net ConnectException URI))))
+      (java.net ConnectException
+                URI)
+      (org.eclipse.jetty.util.ssl SslContextFactory)
+      (org.eclipse.jetty.websocket.client WebSocketClient))))
 
 #?(:clj
    (primitive-math/use-primitive-operators))
@@ -43,14 +46,13 @@
                         (let [data (ba/slice-byte-array
                                     bs offset (+ (int offset) (int length)))]
                           (@*handle-rcv data)))
-               socket (ws/connect
-                       url
-                       :on-close (fn [code reason]
-                                   (@*close-client code reason true))
-                       :on-error on-error
-                       :on-binary on-bin
-                       :on-connect (fn [session]
-                                     (ca/put! connected-ch true)))
+               socket (ws/connect url
+                        :on-binary on-bin
+                        :on-close (fn [code reason]
+                                    (@*close-client code reason true))
+                        :on-connect (fn [session]
+                                      (ca/put! connected-ch true))
+                        :on-error on-error)
                closer #(ws/close socket)
                sender (fn [data]
                         (try
@@ -62,7 +64,7 @@
            (u/sym-map sender closer fragment-size))
          (catch Exception e
            (when log-conn-failure?
-             (logger :info "Websocket failed to connect. Error: %s" e))
+             (logger :info (str "Websocket failed to connect. Error: " e)))
            (ca/put! connected-ch false)
            nil)))))
 
@@ -112,7 +114,7 @@
       (when-not @*shutdown?
         (connection/send-ping conn)))))
 
-(defn <connect [wsc url options *handle-rcv *close-client connected-ch]
+(defn <connect [wsc url loggerq options *handle-rcv *close-client connected-ch]
   (au/go
     (let [{:keys [sender closer fragment-size]} wsc
           {:keys [compression-type keep-alive-secs on-disconnect on-rcv
@@ -122,16 +124,15 @@
                 on-disconnect (constantly nil)
                 on-rcv (constantly nil)
                 log-conn-failure? true
-                connect-timeout-ms 5000
-                logger u/noop-logger}} options
+                connect-timeout-ms 5000}} options
           *shutdown? (atom false)
           ready-ch (ca/chan)
           on-connect (fn [conn]
                        (ca/put! ready-ch true))
           conn-id 0 ;; There is only one
           conn (connection/connection
-                conn-id url url on-connect sender closer nil compression-type
-                true on-rcv)
+                conn-id url url on-connect nil nil sender closer
+                fragment-size compression-type true on-rcv)
           close-client (fn [code reason ws-already-closed?]
                          (reset! *shutdown? true)
                          (connection/close conn code reason ws-already-closed?)
@@ -203,7 +204,8 @@
            *close-client (atom nil)
            connected-ch (ca/promise-chan)
            {:keys [<ws-client logger log-conn-failure?]
-            :or {logger u/noop-logger}} options
+            :or {logger u/println-logger
+                 log-conn-failure? true}} options
            on-error (fn [msg]
                       (try
                         (logger :error (str "Error in websocket: " msg))
@@ -216,5 +218,5 @@
            wsc (au/<? (<ws-client logger url connected-ch on-error *handle-rcv
                                   *close-client log-conn-failure?))]
        (when wsc
-         (au/<? (<connect wsc url options *handle-rcv *close-client
+         (au/<? (<connect wsc url logger options *handle-rcv *close-client
                           connected-ch)))))))

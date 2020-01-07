@@ -1,6 +1,7 @@
 (ns deercreeklabs.tube.utils
   "Common code and utilities."
   (:require
+   [clojure.string :as str]
    [deercreeklabs.baracus :as ba]
    [schema.core :as s])
   #?(:cljs
@@ -43,8 +44,9 @@
   #?(:clj (System/currentTimeMillis)
      :cljs (.getTime (js/Date.))))
 
-(defn noop-logger [level msg]
-  )
+(defn println-logger [level msg]
+  (println (str (current-time-ms) " " (str/upper-case (name level))
+                " " msg "\n")))
 
 ;;;;;;;;;;;;;;;;;;;; Platform detection ;;;;;;;;;;;;;;
 

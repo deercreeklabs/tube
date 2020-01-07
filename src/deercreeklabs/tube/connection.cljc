@@ -18,8 +18,7 @@
 (def pong-control-code (control-code 17))
 
 (defprotocol IConnection
-  (set-on-rcv [this on-rcv] "Set the receive handler")
-  (set-on-disconnect [this on-disconnect])
+  (set-on-rcv! [this on-rcv] "Set the receive handler")
   (get-conn-id [this] "Return the connection id")
   (get-uri [this])
   (get-remote-addr [this])
@@ -32,8 +31,7 @@
   (handle-connected* [this data] "Internal use only")
   (handle-ready* [this data] "Internal use only")
   (handle-ready-end* [this data compressed?] "Internal use only")
-  (handle-msg-in-flight* [this data] "Internal use only")
-  (on-disconnect* [this code reason] "Internal use only"))
+  (handle-msg-in-flight* [this data] "Internal use only"))
 
 (defn send* [conn data compress *peer-fragment-size sender]
   (let [[compression-id compressed] (compress data)
@@ -58,16 +56,13 @@
       (sender frag))))
 
 (deftype Connection
-    [conn-id uri remote-addr on-connect sender closer fragment-size
-     compress client? output-stream *on-rcv *on-disconnect *state
+    [conn-id uri remote-addr on-connect conn-req sender closer
+     fragment-size compress client? output-stream *on-rcv *state
      *peer-fragment-size *num-fragments-expected *num-fragments-rcvd
-     *cur-msg-compressed?]
+     *cur-msg-compressed? *conn-count]
   IConnection
-  (set-on-rcv [this on-rcv]
+  (set-on-rcv! [this on-rcv]
     (reset! *on-rcv on-rcv))
-
-  (set-on-disconnect [this on-disconnect]
-    (reset! *on-disconnect on-disconnect))
 
   (get-conn-id [this]
     conn-id)
@@ -129,7 +124,9 @@
                          :extra-data-str
                          (ba/byte-array->debug-str extra-data)})))
       (when on-connect
-        (on-connect this))))
+        (if client?
+          (on-connect this)
+          (on-connect this conn-req @*conn-count)))))
 
   (handle-ready* [this data]
     (let [masked (bit-and (aget #^bytes data 0) 0xf8)
@@ -172,19 +169,16 @@
                   whole)]
         #?(:clj (.reset ^ByteArrayOutputStream output-stream)
            :cljs (reset! output-stream []))
-        (@*on-rcv this msg))))
-
-  (on-disconnect* [this code reason]
-    (when-let [on-disconnect @*on-disconnect]
-      (on-disconnect this code reason))))
+        (@*on-rcv this msg)))))
 
 (defn connection
-  ([conn-id uri remote-addr on-connect sender closer fragment-size
-    compression-type client?]
-   (connection conn-id uri remote-addr on-connect sender closer
-               fragment-size compression-type client? nil))
-  ([conn-id uri remote-addr on-connect sender closer fragment-size
-    compression-type client? on-rcv]
+  ([conn-id uri remote-addr on-connect conn-req *conn-count sender
+    closer fragment-size compression-type client?]
+   (connection conn-id uri remote-addr on-connect conn-req *conn-count
+               sender closer fragment-size compression-type
+               client? nil))
+  ([conn-id uri remote-addr on-connect conn-req *conn-count sender
+    closer fragment-size compression-type client? on-rcv]
    (let [on-rcv (or on-rcv (constantly nil))
          *on-rcv (atom on-rcv)
          ;; Ignore compression type for now. Don't compress.
@@ -192,14 +186,12 @@
          compress #(vector 0 %)
          output-stream #?(:clj (ByteArrayOutputStream.)
                           :cljs (atom []))
-         *on-disconnect (atom nil)
          *state (atom :connected)
          *peer-fragment-size (atom nil)
          *num-fragments-expected (atom nil)
          *num-fragments-rcvd (atom 0)
          *cur-msg-compressed? (atom false)]
-     (->Connection conn-id uri remote-addr on-connect sender closer
+     (->Connection conn-id uri remote-addr on-connect conn-req sender closer
                    fragment-size compress client? output-stream *on-rcv
-                   *on-disconnect *state *peer-fragment-size
-                   *num-fragments-expected
-                   *num-fragments-rcvd *cur-msg-compressed?))))
+                   *state *peer-fragment-size *num-fragments-expected
+                   *num-fragments-rcvd *cur-msg-compressed? *conn-count))))
