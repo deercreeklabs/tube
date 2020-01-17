@@ -359,20 +359,12 @@
   (ByteArrayInputStream. (.getBytes ^String s)))
 
 (defn make-ssl-ctx [cert-str pkey-str]
-  (let [^SelfSignedCertificate ssc (SelfSignedCertificate.)
-        pkey (.key ssc)
-        ^X509Certificate cert (.cert ssc)
-        cert-array (into-array X509Certificate [cert])
-        builder (SslContextBuilder/forServer
-                 ^PrivateKey pkey
-                 ^"[Ljava.security.cert.X509Certificate;" cert-array)]
-    (.build ^SslContextBuilder builder))
-  #_(let [cert-stream (str->input-stream cert-str)
-          pkey-stream (str->input-stream pkey-str)]
-      (-> (SslContextBuilder/forServer ^InputStream cert-stream
-                                       ^InputStream pkey-stream)
-          (.sslProvider SslProvider/OPENSSL)
-          (.build))))
+  (let [cert-stream (str->input-stream cert-str)
+        pkey-stream (str->input-stream pkey-str)]
+    (-> (SslContextBuilder/forServer ^InputStream cert-stream
+                                     ^InputStream pkey-stream)
+        (.sslProvider SslProvider/OPENSSL)
+        (.build))))
 
 (defn make-ssl-ctx-self-signed []
   (let [^SelfSignedCertificate ssc (SelfSignedCertificate.)
