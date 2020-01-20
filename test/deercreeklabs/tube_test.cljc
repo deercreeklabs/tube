@@ -119,7 +119,7 @@
 
 (deftest test-bad-uri
   (au/test-async
-   2000
+   3000
    (au/go
      (let [uri "ws://not-a-real-url.not-a-domain"
            client (au/<? (tube-client/<tube-client
