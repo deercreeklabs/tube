@@ -21,6 +21,7 @@
 ;;;; e.g. $ lein run
 
 (def normal-uri "ws://localhost:8080/ws")
+(def foo-uri "ws://localhost:8080/foo")
 (def ssl-uri "wss://localhost:8443/ws")
 
 (defn <send-ws-msg-and-return-rsp
@@ -56,16 +57,15 @@
    (au/go
      (let [msg (ba/byte-array [72 101 108 108 111 32 119 111 114 108 100 33])
            norm-rsp (au/<? (<send-ws-msg-and-return-rsp normal-uri msg 25000))
-           ;;ssl-rsp (au/<? (<send-ws-msg-and-return-rsp ssl-uri msg 25000))
-           ]
+           foo-rsp (au/<? (<send-ws-msg-and-return-rsp foo-uri msg 25000))]
        (is (not= nil norm-rsp))
-       #_(is (not= nil ssl-rsp))
+       (is (not= nil foo-rsp))
        (when norm-rsp
          (is (ba/equivalent-byte-arrays? msg
                                          (ba/reverse-byte-array norm-rsp))))
-       #_(when ssl-rsp
-           (is (ba/equivalent-byte-arrays? msg
-                                           (ba/reverse-byte-array ssl-rsp))))))))
+       (when foo-rsp
+         (is (ba/equivalent-byte-arrays? msg
+                                         (ba/reverse-byte-array foo-rsp))))))))
 
 (deftest test-round-trip-w-large-msg
   (au/test-async

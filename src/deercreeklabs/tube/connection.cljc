@@ -19,6 +19,7 @@
 
 (defprotocol IConnection
   (set-on-rcv! [this on-rcv] "Set the receive handler")
+  (set-on-disconnect! [this on-disconnect])
   (get-conn-id [this] "Return the connection id")
   (get-uri [this])
   (get-remote-addr [this])
@@ -31,7 +32,8 @@
   (handle-connected* [this data] "Internal use only")
   (handle-ready* [this data] "Internal use only")
   (handle-ready-end* [this data compressed?] "Internal use only")
-  (handle-msg-in-flight* [this data] "Internal use only"))
+  (handle-msg-in-flight* [this data] "Internal use only")
+  (on-disconnect* [this code reason conn-count] "Internal use only"))
 
 (defn send* [conn data compress *peer-fragment-size sender]
   (let [[compression-id compressed] (compress data)
@@ -57,12 +59,15 @@
 
 (deftype Connection
     [conn-id uri remote-addr on-connect conn-req sender closer
-     fragment-size compress client? output-stream *on-rcv *state
+     fragment-size compress client? output-stream *on-rcv *on-disconnect *state
      *peer-fragment-size *num-fragments-expected *num-fragments-rcvd
      *cur-msg-compressed? *conn-count]
   IConnection
   (set-on-rcv! [this on-rcv]
     (reset! *on-rcv on-rcv))
+
+  (set-on-disconnect! [this on-disconnect]
+    (reset! *on-disconnect on-disconnect))
 
   (get-conn-id [this]
     conn-id)
@@ -169,7 +174,11 @@
                   whole)]
         #?(:clj (.reset ^ByteArrayOutputStream output-stream)
            :cljs (reset! output-stream []))
-        (@*on-rcv this msg)))))
+        (@*on-rcv this msg))))
+
+  (on-disconnect* [this code reason conn-count]
+    (when-let [on-disconnect @*on-disconnect]
+      (on-disconnect this code reason))))
 
 (defn connection
   ([conn-id uri remote-addr on-connect conn-req *conn-count sender
@@ -186,6 +195,7 @@
          compress #(vector 0 %)
          output-stream #?(:clj (ByteArrayOutputStream.)
                           :cljs (atom []))
+         *on-disconnect (atom nil)
          *state (atom :connected)
          *peer-fragment-size (atom nil)
          *num-fragments-expected (atom nil)
@@ -193,5 +203,6 @@
          *cur-msg-compressed? (atom false)]
      (->Connection conn-id uri remote-addr on-connect conn-req sender closer
                    fragment-size compress client? output-stream *on-rcv
-                   *state *peer-fragment-size *num-fragments-expected
-                   *num-fragments-rcvd *cur-msg-compressed? *conn-count))))
+                   *on-disconnect *state *peer-fragment-size
+                   *num-fragments-expected *num-fragments-rcvd
+                   *cur-msg-compressed? *conn-count))))

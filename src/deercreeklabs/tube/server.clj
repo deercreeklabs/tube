@@ -116,10 +116,10 @@
       (.close ctx))))
 
 (defn ws-protocol-handler
-  [ws-path on-connect on-disconnect compression-type ^ByteBufAllocator allocator
-   logger *conn-id *conn-count]
-  (proxy [WebSocketServerProtocolHandler] [(str ws-path) "" true
-                                           (int 65536) false]
+  [on-connect on-disconnect compression-type
+   ^ByteBufAllocator allocator logger *conn-id *conn-count]
+  (proxy [WebSocketServerProtocolHandler] ["/" "" true
+                                           (int 65536) true true]
     (userEventTriggered [^ChannelHandlerContext ctx ^Object evt]
       (when (instance? WebSocketServerProtocolHandler$HandshakeComplete evt)
         (try
@@ -138,16 +138,19 @@
                       sender closer fragment-size compression-type false)
                 on-close  (fn [reason]
                             (swap! *conn-count #(dec (int %)))
+                            (connection/on-disconnect* conn 1000 reason
+                                                       @*conn-count)
                             (on-disconnect conn 1000 reason @*conn-count))
-
                 close-listener (reify GenericFutureListener
                                  (operationComplete [this close-future]
                                    (let [reason "Closing"]
                                      ;; TODO: Figure out the real reason
                                      (on-close reason))))
                 ^ChannelPipeline pipeline (.pipeline channel)]
-            (.addListener ^ChannelFuture (.closeFuture channel) close-listener)
-            (.addLast pipeline "ws-frame" ^SimpleChannelInboundHandler
+            (.addListener ^ChannelFuture (.closeFuture channel)
+                          close-listener)
+            (.addLast pipeline "ws-frame"
+                      ^SimpleChannelInboundHandler
                       (ws-frame-handler allocator conn logger)))
           (catch Exception e
             (logger :error  "Unexpected exception in ws-protocol-handler")
@@ -330,7 +333,8 @@
       (.close ctx))))
 
 (defn initializer
-  [ws-endpoints handle-http http-handler-timeout-ms ssl-ctx logger]
+  [handle-http http-handler-timeout-ms ssl-ctx ws-on-connect ws-on-disconnect
+   ws-compression-type *conn-id *conn-count logger]
   (proxy [ChannelInitializer] []
     (initChannel [^SocketChannel socket-channel]
       (let [^ByteBufAllocator allocator (.alloc socket-channel)
@@ -343,19 +347,12 @@
           (.addLast "ws-comp" (WebSocketServerCompressionHandler.))
           (.addLast "http-req" ^SimpleChannelInboundHandler
                     (http-handler allocator handle-http http-handler-timeout-ms
-                                  (boolean ssl-ctx) logger)))
-        (doseq [[ws-path info] ws-endpoints]
-          (let [{:keys [on-connect on-disconnect compression-type]
-                 :or {compression-type :smart
-                      on-ws-disconnect (constantly nil)}} info
-                *conn-count (atom 0)
-                *conn-id (atom 0)]
-            (.addLast pipeline
-                      (str ws-path "ws-handler")
-                      ^WebSocketServerProtocolHandler
-                      (ws-protocol-handler
-                       ws-path on-connect on-disconnect compression-type
-                       allocator logger *conn-id *conn-count))))))
+                                  (boolean ssl-ctx) logger))
+          (.addLast "ws-handler"
+                    ^WebSocketServerProtocolHandler
+                    (ws-protocol-handler
+                     ws-on-connect ws-on-disconnect ws-compression-type
+                     allocator logger *conn-id *conn-count)))))
     (exceptionCaught [^ChannelHandlerContext ctx e]
       (logger :error
               (str "Got exception in channel initializer:"
@@ -383,38 +380,7 @@
                  ^"[Ljava.security.cert.X509Certificate;" cert-array)]
     (.build ^SslContextBuilder builder)))
 
-(def valid-compression-types #{:smart :none})
-
-(defn check-ws-endpoint [ws-path info]
-  (let [{:keys [on-connect on-disconnect compression-type]} info]
-    (when-not (string? ws-path)
-      (throw (ex-info (str "ws endpoint key must be a string. Got: `"
-                           ws-path "`.")
-                      {:ws-path ws-path})))
-    (when-not (str/starts-with? ws-path "/")
-      (throw (ex-info (str "ws endpoint key must start with `/`. Got: `"
-                           ws-path "`.")
-                      (u/sym-map ws-path info))))
-    (when-not on-connect
-      (throw (ex-info (str "No `:on-connect` fn was provided for ws endpoint `"
-                           ws-path "`.")
-                      {:ws-path ws-path})))
-    (when-not (ifn? on-connect)
-      (throw (ex-info
-              (str "`:on-connect` value must be a function. Got: `"
-                   on-connect "`.")
-              (u/sym-map on-connect ws-path))))
-    (when (and on-disconnect (not (ifn? on-disconnect)))
-      (throw (ex-info
-              (str "`:on-disconnect` value must be a function. Got: `"
-                   on-disconnect "`.")
-              (u/sym-map on-disconnect ws-path))))
-    (when (and compression-type
-               (not (valid-compression-types compression-type)))
-      (throw (ex-info
-              (str "`:compression-type` must be one of " valid-compression-types
-                   ". Got `" compression-type "`.")
-              (u/sym-map info compression-type ws-path))))))
+(def valid-compression-types #{:smart :none :deflate})
 
 (defn check-config [config]
   (let [{:keys [certificate-str
@@ -424,7 +390,9 @@
                 logger
                 private-key-str
                 use-self-signed-certificate?
-                ws-endpoints]} config]
+                ws-on-connect
+                ws-on-disconnect
+                ws-compression-type]} config]
     (when certificate-str
       (when-not (string? certificate-str)
         (throw (ex-info
@@ -461,14 +429,26 @@
       (throw (ex-info
               (str "`:logger` option must be a function. Got: `" logger "`.")
               (u/sym-map logger))))
-    (when ws-endpoints
-      (when-not (map? ws-endpoints)
-        (throw (ex-info
-                (str "`:ws-endpoints` option must be a map. Got: `"
-                     ws-endpoints "`.")
-                (u/sym-map ws-endpoints))))
-      (doseq [[ws-path info] ws-endpoints]
-        (check-ws-endpoint ws-path info))))  )
+    (when-not ws-on-connect
+      (throw (ex-info
+              "You must provide a :ws-on-connect fn in the tube-server config."
+              config)))
+    (when-not (ifn? ws-on-connect)
+      (throw (ex-info
+              (str "`:ws-on-connect` value must be a function. Got: `"
+                   ws-on-connect "`.")
+              (u/sym-map ws-on-connect))))
+    (when (and ws-on-disconnect (not (ifn? ws-on-disconnect)))
+      (throw (ex-info
+              (str "`:ws-on-disconnect` value must be a function. Got: `"
+                   ws-on-disconnect "`.")
+              (u/sym-map ws-on-disconnect))))
+    (when (and ws-compression-type
+               (not (valid-compression-types ws-compression-type)))
+      (throw (ex-info
+              (str "`:ws-compression-type` must be one of "
+                   valid-compression-types ". Got `" ws-compression-type "`.")
+              (u/sym-map ws-compression-type)))))  )
 
 (defn tube-server
   ([port config]
@@ -484,10 +464,14 @@
                  logger
                  private-key-str
                  use-self-signed-certificate?
-                 ws-endpoints]
+                 ws-compression-type
+                 ws-on-connect
+                 ws-on-disconnect]
           :or {dns-cache-secs 60
                http-timeout-ms 30000
-               logger u/println-logger}} config
+               logger u/println-logger
+               ws-compression-type :smart
+               ws-on-disconnect (constantly nil)}} config
          _ (Security/setProperty "networkaddress.cache.ttl"
                                  (str dns-cache-secs))
          ssl-ctx (cond
@@ -500,15 +484,20 @@
          worker-group (NioEventLoopGroup.)
          do-shutdown (fn []
                        (.shutdownGracefully worker-group)
-                       (.shutdownGracefully boss-group))]
+                       (.shutdownGracefully boss-group)
+                       (constantly nil))
+         *conn-id (atom 0)
+         *conn-count (atom 0)]
      (try
        (logger :info "Starting server...")
        (let [b (doto (ServerBootstrap.)
                  (.group boss-group worker-group)
                  (.channel NioServerSocketChannel)
-                 (.childHandler (initializer ws-endpoints
-                                             handle-http http-timeout-ms ssl-ctx
-                                             logger))
+                 (.childHandler (initializer
+                                 handle-http http-timeout-ms ssl-ctx
+                                 ws-on-connect ws-on-disconnect
+                                 ws-compression-type *conn-id *conn-count
+                                 logger))
                  (.option ChannelOption/SO_BACKLOG (int 128))
                  (.childOption ChannelOption/SO_KEEPALIVE true))
              ^ChannelFuture f (-> (.bind ^ServerBootstrap b (int port))
@@ -564,25 +553,23 @@
                         "Conn count: %s")
                    conn-id uri remote-addr conn-count))))
 
-(def ws-endpoints
-  {"/ws" {:on-connect (partial on-connect u/println-logger)
-          :on-disconnect (partial on-disconnect u/println-logger)}})
-
 (defn run-normal-test-server
-  ([] (run-normal-test-server 8080 "/ws"))
-  ([port ws-path]
+  ([] (run-normal-test-server 8080))
+  ([port]
    (let [config {:handle-http handle-http
                  :logger u/println-logger
-                 :ws-endpoints ws-endpoints}]
+                 :ws-on-connect (partial on-connect u/println-logger)
+                 :ws-on-disconnect (partial on-disconnect u/println-logger)}]
      (tube-server port config))))
 
 (defn run-ssl-test-server
-  ([] (run-ssl-test-server 8443 "/ws"))
-  ([port ws-path]
+  ([] (run-ssl-test-server 8443))
+  ([port]
    (let [config {:handle-http handle-http
                  :logger u/println-logger
-                 :ws-endpoints ws-endpoints
-                 :use-self-signed-certificate? true}]
+                 :use-self-signed-certificate? true
+                 :ws-on-connect (partial on-connect u/println-logger)
+                 :ws-on-disconnect (partial on-disconnect u/println-logger)}]
      (tube-server port config))))
 
 (defn run-test-servers []
