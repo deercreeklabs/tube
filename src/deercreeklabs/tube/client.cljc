@@ -47,12 +47,12 @@
                                     bs offset (+ (int offset) (int length)))]
                           (@*handle-rcv data)))
                socket (ws/connect url
-                        :on-binary on-bin
-                        :on-close (fn [code reason]
-                                    (@*close-client code reason true))
-                        :on-connect (fn [session]
-                                      (ca/put! connected-ch true))
-                        :on-error on-error)
+                                  :on-binary on-bin
+                                  :on-close (fn [code reason]
+                                              (@*close-client code reason true))
+                                  :on-connect (fn [session]
+                                                (ca/put! connected-ch true))
+                                  :on-error on-error)
                closer #(ws/close socket)
                sender (fn [data]
                         (try
@@ -64,7 +64,8 @@
            (u/sym-map sender closer fragment-size))
          (catch Exception e
            (when log-conn-failure?
-             (logger :info (str "Websocket failed to connect. Error: " e)))
+             (logger :info (str "Websocket failed to connect. Error: "
+                                (u/ex-msg e))))
            (ca/put! connected-ch false)
            nil)))))
 
@@ -100,7 +101,7 @@
                      (when log-conn-failure?
                        (logger :error
                                (str "Websocket failed to connect. Error: "
-                                    err)))
+                                    (u/ex-msg err))))
                      (ca/put! connected-ch false)))))
          (set! (.-onmessage client) msg-handler)
          (u/sym-map sender closer fragment-size)))))
