@@ -37,6 +37,6 @@
 
   :test {:extra-paths ["test"]
          :extra-deps {http-kit {:mvn/version "2.3.0"}
-                      lambdaisland/kaocha {:mvn/version "0.0-601"}
+                      lambdaisland/kaocha {:mvn/version "0.0-612"}
                       lambdaisland/kaocha-cljs {:mvn/version "0.0-71"}
-                      lambdaisland/kaocha-cloverage {:mvn/version "0.0-41"}}}}}
+                      lambdaisland/kaocha-cloverage {:mvn/version "0.0-45"}}}}}

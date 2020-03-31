@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>deercreeklabs</groupId>
   <artifactId>tube</artifactId>
-  <version>0.3.4</version>
+  <version>0.3.5</version>
   <name>tube</name>
   <description>A websocket client and server library</description>
   <url>https://github.com/deercreeklabs/tube</url>
@@ -45,12 +45,12 @@
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-all</artifactId>
-      <version>4.1.47.Final</version>
+      <version>4.1.48.Final</version>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-tcnative-boringssl-static</artifactId>
-      <version>2.0.29.Final</version>
+      <version>2.0.30.Final</version>
     </dependency>
     <dependency>
       <groupId>org.clojure</groupId>
