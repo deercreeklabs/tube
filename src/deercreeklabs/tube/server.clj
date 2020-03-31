@@ -47,6 +47,7 @@
                                        ServerCookieDecoder
                                        ServerCookieEncoder)
    (io.netty.handler.codec.http.websocketx BinaryWebSocketFrame
+                                           ContinuationWebSocketFrame
                                            TextWebSocketFrame
                                            WebSocketFrame
                                            WebSocketServerProtocolHandler
@@ -103,8 +104,12 @@
                             "You must use binary frames."))
 
         (instance? BinaryWebSocketFrame frame)
-        (let [ba (byte-buf->byte-array (.content ^BinaryWebSocketFrame frame))]
-          (connection/handle-data conn ba))
+        (let [byte-buf (.content ^BinaryWebSocketFrame frame)]
+          (connection/handle-data conn (byte-buf->byte-array byte-buf)))
+
+        (instance? ContinuationWebSocketFrame frame)
+        (let [byte-buf (.content ^ContinuationWebSocketFrame frame)]
+          (connection/handle-data conn (byte-buf->byte-array byte-buf)))
 
         :else
         (logger :error

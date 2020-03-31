@@ -74,7 +74,7 @@
      [logger url connected-ch on-error *handle-rcv *close-client
       log-conn-failure?]
      (au/go
-       (let [fragment-size 32000
+       (let [fragment-size 31999
              client (case (u/platform-kw)
                       :node (let [WSC (js/require "ws")]
                               (WSC. url))
