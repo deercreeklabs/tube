@@ -100,8 +100,10 @@
     (channelRead0 [^ChannelHandlerContext ctx frame]
       (cond
         (instance? TextWebSocketFrame frame)
-        (logger :error (str "Text frames are not supported. "
-                            "You must use binary frames."))
+        (throw
+         (ex-info (str "Text frames are not supported. "
+                       "You must use binary frames.")
+                  (u/sym-map frame)))
 
         (instance? BinaryWebSocketFrame frame)
         (let [byte-buf (.content ^BinaryWebSocketFrame frame)]
@@ -112,8 +114,10 @@
           (connection/handle-data conn (byte-buf->byte-array byte-buf)))
 
         :else
-        (logger :error
-                (str "Expected WebSocketFrame. Got unknown msg:" frame))))
+        (throw
+         (ex-info
+          (str "Expected WebSocketFrame. Got unknown msg:" frame)
+          (u/sym-map frame)))))
     (exceptionCaught [^ChannelHandlerContext ctx e]
       (logger :error
               (str "Got exception in ws-frame-handler: "

@@ -1,6 +1,7 @@
 (ns deercreeklabs.tube.utils
   "Common code and utilities."
   (:require
+   [clojure.pprint :as pprint]
    [clojure.string :as str]
    [deercreeklabs.baracus :as ba]
    [schema.core :as s])
@@ -47,6 +48,12 @@
 (defn println-logger [level msg]
   (println (str (current-time-ms) " " (str/upper-case (name level))
                 " " msg "\n")))
+
+(defn pprint [x]
+  (pprint/pprint x))
+
+(defn pprint-str [x]
+  (with-out-str (pprint/pprint x)))
 
 ;;;;;;;;;;;;;;;;;;;; Platform detection ;;;;;;;;;;;;;;
 

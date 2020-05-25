@@ -12,10 +12,8 @@
    (primitive-math/use-primitive-operators))
 
 (def max-num-fragments 2147483647) ;; 2^31-1
-(defn control-code [x]
-  (ba/byte-array [(bit-shift-left x 3)]))
-(def ping-control-code (control-code 16))
-(def pong-control-code (control-code 17))
+(def ping-control-code 16)
+(def pong-control-code 17)
 
 (defprotocol IConnection
   (set-on-rcv! [this on-rcv] "Set the receive handler")
@@ -93,10 +91,10 @@
       :shutdown nil))
 
   (send-ping [this]
-    (sender ping-control-code))
+    (sender (ba/byte-array [(bit-shift-left ping-control-code 3)])))
 
   (send-pong [this]
-    (sender pong-control-code))
+    (sender (ba/byte-array [(bit-shift-left pong-control-code 3)])))
 
   (close [this]
     (close this 1000 "Explicit close" false))
@@ -136,15 +134,19 @@
   (handle-ready* [this data]
     (let [masked (bit-and (aget #^bytes data 0) 0xf8)
           code (bit-shift-right masked 3)]
-      (case code
+      (condp = code
         0 (handle-ready-end* this data false)
         1 (handle-ready-end* this data true)
-        16 (do ;; Got ping
-             (send-pong this)
-             (when (> (count data) 1)
-               (handle-data this (ba/slice-byte-array data 1))))
-        17 (when (> (count data) 1) ;; Got pong
-             (handle-data this (ba/slice-byte-array data 1))))))
+        ping-control-code (do
+                            (send-pong this)
+                            (when (> (count data) 1)
+                              (handle-data this (ba/slice-byte-array data 1))))
+        pong-control-code (when (> (count data) 1)
+                            (handle-data this (ba/slice-byte-array data 1)))
+        (throw
+         (ex-info (str "Got unknown control code: `" code "`.\n"
+                       (u/pprint-str (u/sym-map data masked)))
+                  (u/sym-map code data masked))))))
 
   (handle-ready-end* [this data compressed?]
     (reset! *cur-msg-compressed? compressed?)

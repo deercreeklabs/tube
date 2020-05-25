@@ -49,7 +49,9 @@
 
 (defn get-lots-of-bytes []
   #?(:clj (ba/read-byte-array-from-file "test/lots_o_bytes.bin")
-     :cljs (ba/concat-byte-arrays (take 10 (repeat tbs/test-bytes)))))
+     ;; Using a larger payload than 1MB (100 * 10KB) causes problems
+     ;; with kaocha's infrastructure
+     :cljs (ba/concat-byte-arrays (take 100 (repeat tbs/test-bytes)))))
 
 (deftest test-round-trip-w-small-msg
   (au/test-async
@@ -69,7 +71,7 @@
 
 (deftest test-round-trip-w-large-msg
   (au/test-async
-   #?(:clj 30000
+   #?(:clj  30000
       :cljs 60000)
    (au/go
      (let [msg (get-lots-of-bytes)
