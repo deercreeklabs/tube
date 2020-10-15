@@ -75,8 +75,8 @@
                 hostname
                 logger
                 private-key-str
-                ws-on-connect
-                ws-on-disconnect
+                on-connect
+                on-disconnect
                 ws-compression-type]} config]
     (when certificate-str
       (when-not (string? certificate-str)
@@ -120,20 +120,20 @@
       (throw (ex-info
               (str "`:logger` option must be a function. Got: `" logger "`.")
               (u/sym-map logger))))
-    (when-not ws-on-connect
+    (when-not on-connect
       (throw (ex-info
-              "You must provide a :ws-on-connect fn in the tube-server config."
+              "You must provide a :on-connect fn in the tube-server config."
               config)))
-    (when-not (ifn? ws-on-connect)
+    (when-not (ifn? on-connect)
       (throw (ex-info
-              (str "`:ws-on-connect` value must be a function. Got: `"
-                   ws-on-connect "`.")
-              (u/sym-map ws-on-connect))))
-    (when (and ws-on-disconnect (not (ifn? ws-on-disconnect)))
+              (str "`:on-connect` value must be a function. Got: `"
+                   on-connect "`.")
+              (u/sym-map on-connect))))
+    (when (and on-disconnect (not (ifn? on-disconnect)))
       (throw (ex-info
-              (str "`:ws-on-disconnect` value must be a function. Got: `"
-                   ws-on-disconnect "`.")
-              (u/sym-map ws-on-disconnect))))
+              (str "`:on-disconnect` value must be a function. Got: `"
+                   on-disconnect "`.")
+              (u/sym-map on-disconnect))))
     (when (and ws-compression-type
                (not (valid-compression-types ws-compression-type)))
       (throw (ex-info
@@ -143,7 +143,7 @@
 
 (defn on-open
   [^WebSocket ws ^ClientHandshake handshake on-connect compression-type
-   ws-on-connect *conn-id *conn-id->conn *conn-count]
+   on-connect *conn-id *conn-id->conn *conn-count]
   (let [fragment-size 65000
         conn-id (swap! *conn-id #(inc (int %)))
         uri (.getResourceDescriptor handshake)
@@ -173,13 +173,13 @@
                  logger
                  private-key-str
                  ws-compression-type
-                 ws-on-connect
-                 ws-on-disconnect]
+                 on-connect
+                 on-disconnect]
           :or {dns-cache-secs 60
                hostname "localhost"
                logger u/println-logger
                ws-compression-type :smart
-               ws-on-disconnect (constantly nil)}} config
+               on-disconnect (constantly nil)}} config
          ssl-ctx (when (and certificate-str private-key-str)
                    (make-ssl-ctx certificate-str private-key-str))
          *conn-id (atom 0)
@@ -190,12 +190,12 @@
                              conn (get @*conn-id->conn conn-id)
                              conn-count (swap! *conn-count #(dec (int %)))]
                          (swap! *conn-id->conn dissoc conn-id)
-                         (ws-on-disconnect conn code reason conn-count)))
+                         (on-disconnect conn code reason conn-count)))
          server (proxy [WebSocketServer] [(InetSocketAddress.
                                            ^String hostname (int port))]
                   (onOpen [ws handshake]
-                    (on-open ws handshake ws-on-connect compression-type
-                             ws-on-connect *conn-id *conn-id->conn *conn-count))
+                    (on-open ws handshake on-connect compression-type
+                             on-connect *conn-id *conn-id->conn *conn-count))
                   (onClose [ws code reason remote?]
                     (close-conn! ws code reason))
                   (onMessage [^WebSocket ws ^ByteBuffer message]
@@ -249,8 +249,8 @@
   ([] (run-normal-test-server 8080))
   ([port]
    (let [config {:logger u/println-logger
-                 :ws-on-connect (partial on-connect u/println-logger)
-                 :ws-on-disconnect (partial on-disconnect u/println-logger)}]
+                 :on-connect (partial on-connect u/println-logger)
+                 :on-disconnect (partial on-disconnect u/println-logger)}]
      (tube-server port config))))
 
 (defn run-ssl-test-server
@@ -259,8 +259,8 @@
    (let [config {:certificate-str (slurp (io/resource "server.crt"))
                  :logger u/println-logger
                  :private-key-str (slurp (io/resource "server.key"))
-                 :ws-on-connect (partial on-connect u/println-logger)
-                 :ws-on-disconnect (partial on-disconnect u/println-logger)}]
+                 :on-connect (partial on-connect u/println-logger)
+                 :on-disconnect (partial on-disconnect u/println-logger)}]
      (tube-server port config))))
 
 (defn -main

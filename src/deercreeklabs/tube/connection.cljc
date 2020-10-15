@@ -17,7 +17,6 @@
 
 (defprotocol IConnection
   (set-on-rcv! [this on-rcv] "Set the receive handler")
-  (set-on-disconnect! [this on-disconnect])
   (get-conn-id [this] "Return the connection id")
   (get-uri [this])
   (get-remote-addr [this])
@@ -63,9 +62,6 @@
   IConnection
   (set-on-rcv! [this on-rcv]
     (reset! *on-rcv on-rcv))
-
-  (set-on-disconnect! [this on-disconnect]
-    (reset! *on-disconnect on-disconnect))
 
   (get-conn-id [this]
     conn-id)
@@ -176,11 +172,7 @@
                   whole)]
         #?(:clj (.reset ^ByteArrayOutputStream output-stream)
            :cljs (reset! output-stream []))
-        (@*on-rcv this msg))))
-
-  (on-disconnect* [this code reason conn-count]
-    (when-let [on-disconnect @*on-disconnect]
-      (on-disconnect this code reason))))
+        (@*on-rcv this msg)))))
 
 (defn connection
   ([conn-id uri remote-addr on-connect conn-req *conn-count
