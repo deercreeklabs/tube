@@ -183,13 +183,12 @@
       (on-disconnect this code reason))))
 
 (defn connection
-  ([conn-id uri remote-addr on-connect conn-req *conn-count sender
-    closer fragment-size compression-type client?]
+  ([conn-id uri remote-addr on-connect conn-req *conn-count
+    sender closer fragment-size compression-type client?]
    (connection conn-id uri remote-addr on-connect conn-req *conn-count
-               sender closer fragment-size compression-type
-               client? nil))
-  ([conn-id uri remote-addr on-connect conn-req *conn-count sender
-    closer fragment-size compression-type client? on-rcv]
+               sender closer fragment-size compression-type client? nil))
+  ([conn-id uri remote-addr on-connect conn-req *conn-count
+    sender closer fragment-size compression-type client? on-rcv]
    (let [on-rcv (or on-rcv (constantly nil))
          *on-rcv (atom on-rcv)
          ;; Ignore compression type for now. Don't compress.

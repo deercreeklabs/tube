@@ -6,17 +6,17 @@
    [deercreeklabs.baracus :as ba]
    [deercreeklabs.tube.connection :as connection]
    [deercreeklabs.tube.utils :as u]
-   #?(:clj [gniazdo.core :as ws])
    #?(:cljs [goog.object])
    #?(:clj [primitive-math])
    [schema.core :as s])
   #?(:clj
      (:import
-      (java.net ConnectException
-                URI)
-      (org.eclipse.jetty.util.ssl SslContextFactory)
-      (org.eclipse.jetty.websocket.client WebSocketClient))))
+      (java.net URI)
+      (java.nio ByteBuffer)
+      (org.java_websocket.client WebSocketClient))))
 
+#?(:clj
+   (set! *warn-on-reflection* true))
 #?(:clj
    (primitive-math/use-primitive-operators))
 
@@ -41,26 +41,35 @@
       log-conn-failure?]
      (ca/go
        (try
-         (let [fragment-size 31999
-               on-bin (fn [bs offset length]
-                        (let [data (ba/slice-byte-array
-                                    bs offset (+ (int offset) (int length)))]
-                          (@*handle-rcv data)))
-               socket (ws/connect url
-                                  :on-binary on-bin
-                                  :on-close (fn [code reason]
-                                              (@*close-client code reason true))
-                                  :on-connect (fn [session]
-                                                (ca/put! connected-ch true))
-                                  :on-error on-error)
-               closer #(ws/close socket)
-               sender (fn [data]
-                        (try
-                          ;; Send-msg mutates binary data, so we make a copy
-                          (ws/send-msg socket (ba/slice-byte-array data))
-                          (catch Exception e
-                            (on-error
-                             (u/ex-msg-and-stacktrace e)))))]
+         (let
+             [fragment-size 31999
+              *connected? (atom false)
+              on-error* (fn [e]
+                          (if @*connected?
+                            (on-error (u/ex-msg-and-stacktrace e))
+                            (do
+                              (when log-conn-failure?
+                                (logger :error
+                                        (str "Websocket failed to connect. "
+                                             "Error: "
+                                             (u/ex-msg-and-stacktrace e))))
+                              (ca/put! connected-ch false))))
+              ^WebSocketClient client (proxy [WebSocketClient] [(URI. url)]
+                                        (onOpen [handshake]
+                                          (reset! *connected? true)
+                                          (ca/put! connected-ch true))
+                                        (onClose [code reason remote]
+                                          (@*close-client code reason true))
+                                        (onError [e]
+                                          (on-error* e))
+                                        (onMessage [^ByteBuffer bb]
+                                          (let [size (.remaining bb)
+                                                ba (ba/byte-array size)]
+                                            (.get bb (bytes ba))
+                                            (@*handle-rcv ba))))
+              sender #(.send client (bytes %))
+              closer #(.close client 1000)]
+           (.connect client)
            (u/sym-map sender closer fragment-size))
          (catch Exception e
            (when log-conn-failure?
@@ -115,11 +124,11 @@
       (when-not @*shutdown?
         (connection/send-ping conn)))))
 
-(defn <connect [wsc url loggerq options *handle-rcv *close-client connected-ch]
+(defn <connect [wsc url logger options *handle-rcv *close-client connected-ch]
   (au/go
     (let [{:keys [sender closer fragment-size]} wsc
           {:keys [compression-type keep-alive-secs on-disconnect on-rcv
-                  log-conn-failure? connect-timeout-ms logger]
+                  log-conn-failure? connect-timeout-ms]
            :or {compression-type :smart
                 keep-alive-secs default-keepalive-secs
                 on-disconnect (constantly nil)
