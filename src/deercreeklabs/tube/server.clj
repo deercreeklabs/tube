@@ -143,14 +143,15 @@
 
 (defn on-open
   [^WebSocket ws ^ClientHandshake handshake on-connect compression-type
-   on-connect *conn-id *conn-id->conn *conn-count]
+   on-connect logger *conn-id *conn-id->conn *conn-count]
   (let [fragment-size 65000
         conn-id (swap! *conn-id #(inc (int %)))
         uri (.getResourceDescriptor handshake)
         ^InetSocketAddress remote-sock-addr (.getRemoteSocketAddress ws)
         remote-addr (.getHostAddress
                      ^InetAddress (.getAddress remote-sock-addr))
-        sender #(.send ws (bytes %))
+        sender (fn [ba]
+                 (.send ws (bytes ba)))
         closer #(.close ws %)
         _ (swap! *conn-count #(inc (int %)))
         conn (connection/connection conn-id uri remote-addr on-connect ws
@@ -172,13 +173,12 @@
                  hostname
                  logger
                  private-key-str
-                 ws-compression-type
                  on-connect
                  on-disconnect]
           :or {dns-cache-secs 60
                hostname "localhost"
                logger u/println-logger
-               ws-compression-type :smart
+               compression-type :smart
                on-disconnect (constantly nil)}} config
          ssl-ctx (when (and certificate-str private-key-str)
                    (make-ssl-ctx certificate-str private-key-str))
@@ -194,8 +194,8 @@
          server (proxy [WebSocketServer] [(InetSocketAddress.
                                            ^String hostname (int port))]
                   (onOpen [ws handshake]
-                    (on-open ws handshake on-connect compression-type
-                             on-connect *conn-id *conn-id->conn *conn-count))
+                    (on-open ws handshake on-connect compression-type on-connect
+                             logger *conn-id *conn-id->conn *conn-count))
                   (onClose [ws code reason remote?]
                     (close-conn! ws code reason))
                   (onMessage [^WebSocket ws ^ByteBuffer message]
@@ -234,7 +234,7 @@
         on-rcv (fn [conn data]
                  (connection/send
                   conn (ba/reverse-byte-array data)))]
-    (logger :info (format "Opened conn %s on %s from %s. Conn count: %s"
+    (logger :info (format "Opened conn %s on %s from %s. Server conn count: %s"
                           conn-id uri remote-addr conn-count))
     (connection/set-on-rcv! conn on-rcv)))
 
@@ -242,7 +242,7 @@
   (let [conn-id (connection/get-conn-id conn)
         uri (connection/get-uri conn)
         remote-addr (connection/get-remote-addr conn)]
-    (logger :info (format "Closed conn %s on %s from %s. Conn count: %s"
+    (logger :info (format "Closed conn %s on %s from %s. Server conn count: %s"
                           conn-id uri remote-addr conn-count))))
 
 (defn run-normal-test-server
