@@ -29,11 +29,12 @@
   ([uri msg timeout on-disconnect]
    (au/go
      (let [client-rcv-ch (ca/chan)
-           options {:on-rcv (fn [conn data]
+           options {:connect-timeout-ms 1000
+                    :keep-alive-secs 25
+                    :on-rcv (fn [conn data]
                               (ca/put! client-rcv-ch data))
-                    :on-disconnect on-disconnect
-                    :keep-alive-secs 25}
-           client (au/<? (tube-client/<tube-client uri 1000 options))]
+                    :on-disconnect on-disconnect}
+           client (au/<? (tube-client/<tube-client uri options))]
        (is (not= nil client))
        (when client
          (tube-client/send client msg)
@@ -150,5 +151,5 @@
    (au/go
      (let [uri "ws://not-a-real-url.not-a-domain"
            client (au/<? (tube-client/<tube-client
-                          uri 1000 {:log-conn-failure? false}))]
+                          uri {:log-conn-failure? false}))]
        (is (= nil client))))))
