@@ -176,7 +176,6 @@
                  on-connect
                  on-disconnect]
           :or {dns-cache-secs 60
-               hostname "localhost"
                logger u/println-logger
                compression-type :smart
                on-disconnect (constantly nil)}} config
@@ -190,9 +189,12 @@
                              conn (get @*conn-id->conn conn-id)
                              conn-count (swap! *conn-count #(dec (int %)))]
                          (swap! *conn-id->conn dissoc conn-id)
-                         (on-disconnect conn code reason conn-count)))
-         server (proxy [WebSocketServer] [(InetSocketAddress.
-                                           ^String hostname (int port))]
+                         (when conn
+                           (on-disconnect conn code reason conn-count))))
+         inet-addr (if hostname
+                     (InetSocketAddress. ^String hostname (int port))
+                     (InetSocketAddress. (int port)))
+         server (proxy [WebSocketServer] [inet-addr]
                   (onOpen [ws handshake]
                     (on-open ws handshake on-connect compression-type on-connect
                              logger *conn-id *conn-id->conn *conn-count))
