@@ -17,7 +17,7 @@
                           "[cider.nrepl/cider-middleware]"]}
 
   :cider-cljs {:extra-deps {cider/cider-nrepl {:mvn/version  "0.25.4"}
-                            cider/piggieback {:mvn/version "0.5.1"}}
+                            cider/piggieback {:mvn/version "0.5.2"}}
                :main-opts
                ["-m" "nrepl.cmdline" "--middleware"
                 "[cider.nrepl/cider-middleware,cider.piggieback/wrap-cljs-repl]"]}
@@ -27,7 +27,7 @@
 
   :pack {:extra-deps {pack/pack.alpha
                       {:git/url "https://github.com/juxt/pack.alpha.git"
-                       :sha "e518d9b2b70f4292c9988d2792b8667d88a6f4df"}}
+                       :sha "0e8731e0f24db05b74769e219051b0e92b50624a"}}
          :main-opts ["-m"]}
 
 
@@ -38,4 +38,4 @@
                       lambdaisland/kaocha-cljs {:mvn/version "0.0-71"}
                       lambdaisland/kaocha-cloverage {:mvn/version "1.0-45"}}}
 
-  :uberjar {:extra-deps {uberdeps {:mvn/version "1.0.2"}}}}}
+  :uberjar {:extra-deps {uberdeps/uberdeps {:mvn/version "1.0.2"}}}}}
