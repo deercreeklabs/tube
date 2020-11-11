@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>deercreeklabs</groupId>
   <artifactId>tube</artifactId>
-  <version>0.4.0</version>
+  <version>0.4.1</version>
   <name>tube</name>
   <description>A websocket client and server library</description>
   <url>https://github.com/deercreeklabs/tube</url>
@@ -25,7 +25,6 @@
       <url>https://clojars.org/repo</url>
     </repository>
   </distributionManagement>
-
   <dependencies>
     <dependency>
       <groupId>org.clojure</groupId>
@@ -33,19 +32,19 @@
       <version>1.10.1</version>
     </dependency>
     <dependency>
-      <groupId>deercreeklabs</groupId>
-      <artifactId>async-utils</artifactId>
-      <version>0.1.22</version>
-    </dependency>
-    <dependency>
-      <groupId>deercreeklabs</groupId>
-      <artifactId>baracus</artifactId>
-      <version>0.2.6</version>
-    </dependency>
-    <dependency>
       <groupId>org.clojure</groupId>
       <artifactId>clojurescript</artifactId>
       <version>1.10.773</version>
+    </dependency>
+    <dependency>
+      <groupId>primitive-math</groupId>
+      <artifactId>primitive-math</artifactId>
+      <version>0.1.6</version>
+    </dependency>
+    <dependency>
+      <groupId>deercreeklabs</groupId>
+      <artifactId>async-utils</artifactId>
+      <version>0.1.22</version>
     </dependency>
     <dependency>
       <groupId>org.java-websocket</groupId>
@@ -53,9 +52,9 @@
       <version>1.5.1</version>
     </dependency>
     <dependency>
-      <groupId>primitive-math</groupId>
-      <artifactId>primitive-math</artifactId>
-      <version>0.1.6</version>
+      <groupId>deercreeklabs</groupId>
+      <artifactId>baracus</artifactId>
+      <version>0.2.6</version>
     </dependency>
   </dependencies>
   <build>
