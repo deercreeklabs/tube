@@ -80,7 +80,7 @@
                                                  ba (ba/byte-array size)]
                                              (.get bb (bytes ba))
                                              (handle-rcv! ba))))]
-           (.connect client)
+           (.connectBlocking client)
            (reset! *client client))
          (catch Exception e
            (when log-conn-failure?

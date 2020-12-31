@@ -148,8 +148,9 @@
         conn-id (swap! *conn-id #(inc (int %)))
         uri (.getResourceDescriptor handshake)
         ^InetSocketAddress remote-sock-addr (.getRemoteSocketAddress ws)
-        remote-addr (.getHostAddress
-                     ^InetAddress (.getAddress remote-sock-addr))
+        remote-addr (when remote-sock-addr
+                      (.getHostAddress
+                       ^InetAddress (.getAddress remote-sock-addr)))
         sender (fn [ba]
                  (.send ws (bytes ba)))
         closer #(.close ws %)
