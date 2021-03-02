@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-clojure -A:clj:uberjar -m uberdeps.uberjar --target target/tube-server-uberjar.jar
