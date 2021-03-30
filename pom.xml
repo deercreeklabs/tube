@@ -39,7 +39,7 @@
     <dependency>
       <groupId>deercreeklabs</groupId>
       <artifactId>async-utils</artifactId>
-      <version>0.1.22</version>
+      <version>0.1.23</version>
     </dependency>
     <dependency>
       <groupId>org.java-websocket</groupId>
@@ -49,7 +49,7 @@
     <dependency>
       <groupId>deercreeklabs</groupId>
       <artifactId>baracus</artifactId>
-      <version>0.2.6</version>
+      <version>0.2.7</version>
     </dependency>
   </dependencies>
   <build>
