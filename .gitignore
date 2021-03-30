@@ -11,8 +11,10 @@
 /out
 
 # JS stuff
+/.shadow-cljs/
 /node_modules
 package-lock.json
+/resources/public/js/test/
 
 # Emacs stuff
 *~
