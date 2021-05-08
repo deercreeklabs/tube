@@ -29,8 +29,7 @@
   (handle-connected* [this data] "Internal use only")
   (handle-ready* [this data] "Internal use only")
   (handle-ready-end* [this data compressed?] "Internal use only")
-  (handle-msg-in-flight* [this data] "Internal use only")
-  (on-disconnect* [this code reason conn-count] "Internal use only"))
+  (handle-msg-in-flight* [this data] "Internal use only"))
 
 (defn send* [conn data compress *peer-fragment-size sender]
   (let [[compression-id compressed] (compress data)
