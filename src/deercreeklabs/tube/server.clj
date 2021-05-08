@@ -197,14 +197,17 @@
                      (InetSocketAddress. (int port)))
          server (proxy [WebSocketServer] [inet-addr]
                   (onOpen [ws handshake]
-                    (on-open ws handshake on-connect compression-type on-connect
-                             logger *conn-id *conn-id->conn *conn-count))
+                    (when ws
+                      (on-open ws handshake on-connect compression-type on-connect
+                               logger *conn-id *conn-id->conn *conn-count)))
                   (onClose [ws code reason remote?]
-                    (close-conn! ws code reason))
+                    (when ws
+                        (close-conn! ws code reason)))
                   (onMessage [^WebSocket ws ^ByteBuffer message]
-                    (let [conn-id (.getAttachment ws)
-                          conn (get @*conn-id->conn conn-id)]
-                      (connection/handle-data conn (.array message))))
+                    (when ws
+                        (let [conn-id (.getAttachment ws)
+                              conn (get @*conn-id->conn conn-id)]
+                          (connection/handle-data conn (.array message)))))
                   (onError [ws e]
                     (let [ex-str (u/ex-msg-and-stacktrace e)]
                       (logger :error
