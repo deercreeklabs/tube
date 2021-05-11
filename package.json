@@ -3,6 +3,7 @@
         "@cljs-oss/module-deps": "1.1.1"
     },
     "devDependencies": {
+        "shadow-cljs": "2.12.6",
         "source-map-support": "0.5.19",
         "ws": "7.4.5"
     }
