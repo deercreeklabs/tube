@@ -1,6 +1,7 @@
 {:deps
  {deercreeklabs/async-utils {:mvn/version "0.1.23"}
   deercreeklabs/baracus {:mvn/version "0.2.7"}
+  javax.xml.bind/jaxb-api {:mvn/version "2.4.0-b180830.0359"}
   org.java-websocket/Java-WebSocket {:mvn/version "1.5.2"}
   primitive-math/primitive-math {:mvn/version "0.1.6"}}
 
